@@ -4,12 +4,16 @@
 #include "../tx.h"
 #include "../concurrentqueue.h"  // moodycamel lock-free queue (same as Tiga uses)
 #include "luigi_entry.h"
+#include "luigi_executor.h"
 
 #include <map>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+// Forward declaration - the actual type is defined in benchmarks/abstract_ordered_index.h
+class abstract_ordered_index;
 
 namespace janus {
 
@@ -62,9 +66,6 @@ class SchedulerLuigi : public SchedulerClassic {
   void HoldReleaseTd();
   void ExecTd();
 
-  // Execute a single transaction entry
-  void ExecuteEntry(std::shared_ptr<LuigiLogEntry> entry);
-
   // Helpers
   uint64_t GetMicrosecondTimestamp();
 
@@ -109,9 +110,22 @@ class SchedulerLuigi : public SchedulerClassic {
   //==========================================================================
   uint32_t partition_id_ = 0;
 
+  //==========================================================================
+  // Executor (handles actual read/write operations and replication)
+  //==========================================================================
+  LuigiExecutor executor_;
+
  public:
-  void SetPartitionId(uint32_t par_id) { partition_id_ = par_id; }
+  void SetPartitionId(uint32_t par_id) { 
+    partition_id_ = par_id; 
+    executor_.SetPartitionId(par_id);
+  }
   uint32_t GetPartitionId() const { return partition_id_; }
+  
+  // Set the database tables reference (passed to executor)
+  void SetDbTables(std::map<int, abstract_ordered_index*>* tables) { 
+    executor_.SetDbTables(tables); 
+  }
 };
 
 } // namespace janus
