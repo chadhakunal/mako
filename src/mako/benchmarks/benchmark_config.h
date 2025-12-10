@@ -69,6 +69,7 @@ class BenchmarkConfig {
           backoff_aborted_transaction_(0),
           use_hashtable_(0),
           is_micro_(0), // if run micro-based workload
+          use_luigi_(0), // if use Luigi timestamp-ordered execution
           end_received_(0),
           end_received_leader_(0),
           replay_batch_(0),
@@ -100,6 +101,7 @@ class BenchmarkConfig {
       int backoff_aborted_transaction_;
       int use_hashtable_;
       int is_micro_;
+      int use_luigi_;
       int is_replicated_;
       string paxos_proc_name_;
       std::vector<std::string> paxos_config_file_;
@@ -179,6 +181,8 @@ class BenchmarkConfig {
       // @safe
       int getIsMicro() const { return is_micro_; }
       // @safe
+      int getUseLuigi() const { return use_luigi_; }
+      // @safe
       int getIsReplicated() const { return is_replicated_; }
       // @unsafe: returns std::string by value
       std::string getPaxosProcName() const { return paxos_proc_name_; }
@@ -225,6 +229,7 @@ class BenchmarkConfig {
       void setBackoffAbortedTransaction(int backoff) { backoff_aborted_transaction_ = backoff; }
       void setUseHashtable(int use) { use_hashtable_ = use; }
       void setIsMicro(int micro) { is_micro_ = micro; }
+      void setUseLuigi(int luigi) { use_luigi_ = luigi; }
       void setIsReplicated(int replicated) { is_replicated_ = replicated; }
       void setPaxosProcName(std::string paxos_proc_name) { paxos_proc_name_ = paxos_proc_name; setCluster(paxos_proc_name); setClusterRole(mako::convertCluster(paxos_proc_name));}
       void setPaxosConfigFile(const std::vector<std::string>& paxos_config_file) { paxos_config_file_ = paxos_config_file; }

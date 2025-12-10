@@ -521,6 +521,7 @@ set(MAKO_SRCFILES
   # Luigi files (Tiga-style timestamp ordering for leaders)
   "${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi_scheduler.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi_executor.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/mako/luigi/luigi_owd.cc"
 )
 
 # Benchmark flags
