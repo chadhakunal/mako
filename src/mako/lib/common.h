@@ -179,7 +179,7 @@ namespace mako
     
     // Luigi: Tiga-style timestamp-ordered execution
     const uint8_t luigiDispatchReqType = 14;
-    
+
     const size_t max_key_length = 64;
 #if defined(MEGA_BENCHMARK)
     const size_t max_value_length = 7000; // mega in new order 
@@ -274,8 +274,7 @@ namespace mako
         uint16_t target_server_id;     // Target shard
         uint32_t req_nr;               // Request number (for matching response)
         uint64_t txn_id;               // Unique transaction ID
-        uint64_t send_time;            // Timestamp when coordinator sent this (microseconds)
-        uint32_t bound;                // Deadline = send_time + bound
+        uint64_t expected_time;        // Timestamp at which transaction should execute
         uint16_t num_ops;              // Number of operations in this dispatch
         // Each op: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
         // op_type: 0=read, 1=write
@@ -290,6 +289,10 @@ namespace mako
         uint16_t num_results;          // Number of read results
         char results_data[luigi_max_ops * max_value_length];
     };
+
+    // Operation types for Luigi
+    const uint8_t LUIGI_OP_READ = 0;
+    const uint8_t LUIGI_OP_WRITE = 1;
 
     struct lock_request_t
     {
@@ -509,7 +512,6 @@ namespace mako
         return static_cast<size_t>(ms * 1000 * 1000 * freq_ghz);
     }
 
-    // @unsafe: uses std::chrono::duration::count
     static uint64_t getCurrentTimeMillis() {
         return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch()).count();

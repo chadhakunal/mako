@@ -687,10 +687,11 @@ namespace mako
         std::vector<std::string> result_read_values;
         
         // Dispatch to Luigi scheduler with completion callback
+        // Use expected_time from request as the execution deadline; map to Luigi scheduler params
         luigi_scheduler_->LuigiDispatchFromRequest(
             req->txn_id,
-            req->send_time,
-            req->bound,
+            req->expected_time,
+            0 /*bound*/,  // deadline = expected_time
             ops,
             [&](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
                 std::lock_guard<std::mutex> lock(completion_mutex);

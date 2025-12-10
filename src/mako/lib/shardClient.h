@@ -32,6 +32,24 @@ namespace mako
         // Returns SUCCESS if ready, ERROR/TIMEOUT if not ready yet
         int checkRemoteShardReady(int dstShardIndex);
         int remoteInvokeSerializeUtil(uint32_t timestamp);
+        
+        // Luigi OWD: Ping all remote shards to measure RTT and update OWD table
+        // Should be called periodically by workers to keep OWD estimates fresh
+        void remotePingForOWD();
+        
+        // Luigi: dispatch transaction to involved shards
+        // Returns commit timestamps and read results per shard
+        int remoteLuigiDispatch(
+            uint64_t txn_id,
+            uint64_t expected_time,
+            std::vector<int>& table_ids,
+            std::vector<uint8_t>& op_types,      // LUIGI_OP_READ or LUIGI_OP_WRITE
+            std::vector<std::string>& keys,
+            std::vector<std::string>& values,
+            std::map<int, uint64_t>& out_execute_timestamps,  // shard_idx -> execute_ts
+            std::map<int, std::vector<std::string>>& out_read_results  // shard_idx -> read values
+        );
+        
         void statistics();
         void stop();
         void setBreakTimeout(bool);
@@ -54,11 +72,16 @@ namespace mako
         int num_response_waiting;
         vector<int> status_received;
         vector<uint64_t> int_received; // indexed by shard
+        
+        // Luigi response storage
+        std::map<int, uint64_t> luigi_execute_timestamps_;      // shard_idx -> execute_ts
+        std::map<int, std::vector<std::string>> luigi_read_results_;  // shard_idx -> read values
 
         /* Callbacks for hearing back from a shard for an operation. */
         void GetCallback(char *respBuf);
         void ScanCallback(char *respBuf);
         void BasicCallBack(char *respBuf);
+        void LuigiDispatchCallback(char *respBuf);
 
         /* Timeout which only go to one shard. */
         void GiveUpTimeout();
