@@ -4,9 +4,6 @@
 #include <iostream>
 #include <functional>
 
-// Mako includes for execution integration
-#include "deptran/s_main.h"  // For add_log_to_nc
-
 namespace janus {
 
 //=============================================================================
@@ -206,64 +203,11 @@ void SchedulerLuigi::HoldReleaseTd() {
 }
 
 //=============================================================================
-// ExecuteEntry: Execute a single transaction
-//
-// This is where we integrate with Mako's execution machinery.
-// For now, we implement a simplified version that:
-// 1. Processes all operations
-// 2. Triggers replication via add_log_to_nc (same as Mako)
-// 3. Calls the reply callback
-//=============================================================================
-
-void SchedulerLuigi::ExecuteEntry(std::shared_ptr<LuigiLogEntry> entry) {
-  entry->exec_status_.store(LUIGI_EXEC_DIRECT);
-  
-  // The commit timestamp is the deadline at which we're executing
-  uint64_t commit_ts = entry->local_deadline_;
-  int status = 0;  // SUCCESS
-  
-  // TODO: Actual execution logic would go here
-  // For now, we simulate successful execution
-  // In a real implementation:
-  // 1. For reads: query the database, store results in entry->read_results_
-  // 2. For writes: apply writes to database
-  // 3. Call shard_serialize_util() equivalent for replication
-  
-  // Process operations (placeholder - actual DB interaction needed)
-  entry->read_results_.clear();
-  for (auto& op : entry->ops_) {
-    if (op.op_type == 0) {
-      // Read operation - would query DB here
-      // For now, return empty result
-      entry->read_results_.push_back("");
-    } else {
-      // Write operation - would apply to DB here
-    }
-    op.executed = true;
-  }
-  
-  // Trigger replication (using Mako's background Paxos)
-  // This is where we serialize the log entry and submit to Paxos workers
-  // The actual implementation would serialize entry->ops_ into a log buffer
-  // and call add_log_to_nc(log_buffer, log_len, partition_id_)
-  
-  // For now, we skip actual replication and just mark as done
-  // TODO: Implement log serialization and call add_log_to_nc
-  
-  entry->exec_status_.store(LUIGI_EXEC_DONE);
-  
-  // Call reply callback
-  if (entry->reply_cb_) {
-    entry->reply_cb_(status, commit_ts, entry->read_results_);
-  }
-}
-
-//=============================================================================
 // ExecTd: Execution Thread
 //
 // This thread:
 // 1. Pulls txns from ready_txn_queue_ (deadline has passed, ready to execute)
-// 2. Executes each transaction via ExecuteEntry()
+// 2. Delegates execution to LuigiExecutor (handles DB ops, multi-shard, replication)
 //=============================================================================
 
 void SchedulerLuigi::ExecTd() {
@@ -273,7 +217,8 @@ void SchedulerLuigi::ExecTd() {
     size_t cnt = ready_txn_queue_.try_dequeue_bulk(entries, 64);
 
     for (size_t i = 0; i < cnt; i++) {
-      ExecuteEntry(entries[i]);
+      // Delegate to executor for clean separation of concerns
+      executor_.Execute(entries[i]);
     }
 
     if (cnt == 0) {
