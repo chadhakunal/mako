@@ -1,5 +1,6 @@
 
 #include <iostream>
+#include <chrono>
 #include "lib/fasttransport.h"
 #include "lib/promise.h"
 #include "lib/client.h"
@@ -7,6 +8,7 @@
 #include "lib/configuration.h"
 #include "lib/common.h"
 #include "benchmarks/sto/Interface.hh"
+#include "luigi/luigi_owd.h"
 
 namespace mako
 {
@@ -397,6 +399,49 @@ namespace mako
         return is_all_response_ok(); */
     }
 
+    void ShardClient::remotePingForOWD() {
+        // Ping all remote shards to measure RTT and update OWD table
+        auto& luigiOwd = luigi::LuigiOWD::getInstance();
+        if (!luigiOwd.isInitialized()) {
+            return;  // OWD service not initialized
+        }
+
+        auto remote_shards = luigiOwd.getRemoteShards();
+        uint8_t centerId = clusterRole;
+        uint16_t server_id = 0;
+
+        for (int dst_shard : remote_shards) {
+            uint64_t set_bits = (1ULL << dst_shard);
+            
+            // Record start time
+            auto start_time = std::chrono::steady_clock::now();
+            
+            // Send ping (reuse warmup mechanism)
+            calculate_num_response_waiting_no_skip(set_bits);
+            for (int i = 0; i < (int)int_received.size(); i++) int_received[i] = 0;
+            
+            client->InvokeWarmup(++tid,
+                                0,  // req_val = 0 for ping
+                                centerId,
+                                set_bits,
+                                server_id,
+                                bind(&ShardClient::SendToAllIntCallBack, this, placeholders::_1),
+                                bind(&ShardClient::SendToAllGiveUpTimeout, this),
+                                BASIC_TIMEOUT);
+            
+            // Calculate RTT
+            auto end_time = std::chrono::steady_clock::now();
+            uint64_t rtt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                end_time - start_time
+            ).count();
+            
+            // Only update OWD if ping succeeded
+            if (is_all_response_ok()) {
+                luigiOwd.updateOWD(dst_shard, rtt_ms);
+            }
+        }
+    }
+
     int ShardClient::remoteControl(int control, uint32_t value, uint32_t &ret_value, uint64_t set_bits) {
         calculate_num_response_waiting_no_skip(set_bits);
         uint16_t server_id = 0; // to locate which helper_queue
@@ -510,6 +555,126 @@ namespace mako
                             bind(&ShardClient::SendToAllStatusCallBack, this, placeholders::_1),
                             bind(&ShardClient::SendToAllGiveUpTimeout, this),
                             ABORT_TIMEOUT);
+        return is_all_response_ok();
+    }
+
+    //=========================================================================
+    // Luigi: Timestamp-ordered execution
+    //=========================================================================
+    // TODO: Currently uses blocking model (waits for all shard responses).
+    // Future improvement: Implement pipelined/async model where:
+    //   1. Coordinator sends txn with expected_time, doesn't block
+    //   2. Continues sending new transactions
+    //   3. Server executes when current_time >= expected_time, responds async
+    //   4. Coordinator processes responses via callbacks, decides commit/abort
+    // This requires: PendingLuigiTxn tracking, completion callbacks, 
+    // and restructuring Transaction.cc commit flow.
+
+    void ShardClient::LuigiDispatchCallback(char *respBuf) {
+        auto *resp = reinterpret_cast<luigi_dispatch_response_t *>(respBuf);
+        
+        // Store status
+        status_received.push_back(resp->status);
+        
+        // Find which shard this response is from based on txn context
+        // For now, we track by order received - the caller matches by shard
+        // Store commit timestamp (we'll map to shard in the main function)
+        // Using a simple approach: store in a vector, match by response order
+        
+        // Parse read results from response
+        std::vector<std::string> read_values;
+        char *data_ptr = resp->results_data;
+        for (uint16_t i = 0; i < resp->num_results; i++) {
+            // Each result: [vlen(2) | value]
+            uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
+            data_ptr += sizeof(uint16_t);
+            read_values.emplace_back(data_ptr, vlen);
+            data_ptr += vlen;
+        }
+        
+        // Store using response index (will be mapped to shard by caller)
+        int response_idx = status_received.size() - 1;
+        luigi_execute_timestamps_[response_idx] = resp->commit_timestamp;
+        luigi_read_results_[response_idx] = std::move(read_values);
+    }
+
+    int ShardClient::remoteLuigiDispatch(
+        uint64_t txn_id,
+        uint64_t expected_time,
+        std::vector<int>& table_ids,
+        std::vector<uint8_t>& op_types,
+        std::vector<std::string>& keys,
+        std::vector<std::string>& values,
+        std::map<int, uint64_t>& out_execute_timestamps,
+        std::map<int, std::vector<std::string>>& out_read_results)
+    {
+        if (table_ids.empty()) {
+            return ErrorCode::SUCCESS;
+        }
+
+        // Clear previous luigi response storage
+        luigi_execute_timestamps_.clear();
+        luigi_read_results_.clear();
+        status_received.clear();
+
+        // Group operations by destination shard
+        std::map<int, LuigiDispatchRequestBuilder*> requests_per_shard;
+        std::vector<int> shard_order;  // Track order for response mapping
+        
+        uint16_t server_id = shardIndex * config.warehouses + par_id;
+        int shards_to_send_bits = 0;
+
+        for (size_t i = 0; i < table_ids.size(); i++) {
+            int remote_table_id = table_ids[i];
+            int dst_shard_idx = (remote_table_id - 1) / mako::NUM_TABLES_PER_SHARD;
+            
+            shards_to_send_bits |= (1 << dst_shard_idx);
+
+            // Create builder for this shard if not exists
+            if (requests_per_shard.find(dst_shard_idx) == requests_per_shard.end()) {
+                auto* builder = new LuigiDispatchRequestBuilder();
+                builder->set_header(server_id, txn_id, expected_time);
+                requests_per_shard[dst_shard_idx] = builder;
+                shard_order.push_back(dst_shard_idx);
+            }
+
+            // Add operation to the appropriate shard's request
+            requests_per_shard[dst_shard_idx]->add_op(
+                remote_table_id,
+                op_types[i],
+                keys[i],
+                values[i]
+            );
+        }
+
+        // Set up waiting
+        Promise promise(BASIC_TIMEOUT);
+        waiting = &promise;
+        
+        calculate_num_response_waiting_no_skip(shards_to_send_bits);
+
+        // Send to all involved shards
+        client->InvokeLuigiDispatch(
+            ++tid,
+            requests_per_shard,
+            bind(&ShardClient::LuigiDispatchCallback, this, placeholders::_1),
+            bind(&ShardClient::SendToAllGiveUpTimeout, this),
+            BASIC_TIMEOUT
+        );
+
+        // Clean up builders
+        for (auto& kv : requests_per_shard) {
+            delete kv.second;
+        }
+
+        // Map responses back to shards
+        // Responses come back in the order shards were added to shard_order
+        for (size_t i = 0; i < shard_order.size() && i < luigi_execute_timestamps_.size(); i++) {
+            int shard_idx = shard_order[i];
+            out_execute_timestamps[shard_idx] = luigi_execute_timestamps_[i];
+            out_read_results[shard_idx] = std::move(luigi_read_results_[i]);
+        }
+
         return is_all_response_ok();
     }
 }

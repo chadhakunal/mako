@@ -9,6 +9,7 @@
 #include "benchmarks/sto/sync_util.hh"
 #include "lib/common.h"
 #include "benchmarks/benchmark_config.h"
+#include "luigi/luigi_owd.h"
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -629,6 +630,133 @@ abort:
         TThread::sclient->remoteAbort();
     }
     return false;
+}
+
+// Luigi: Timestamp-ordered transaction execution protocol
+// Instead of OCC's lock-validate-install, we:
+// 1. Collect all operations (reads + writes)
+// 2. Get expected timestamp
+// 3. Send transaction to all involved shards
+// 4. Wait for responses with commit timestamps
+// 5. Check timestamp consensus across shards
+bool Transaction::try_commit_luigi() {
+    assert(TThread::id() == threadid_);
+    TXP_ACCOUNT(txp_max_set, tset_size_);
+    TXP_ACCOUNT(txp_total_n, tset_size_);
+
+    assert(state_ == s_in_progress || state_ >= s_aborted);
+    if (state_ >= s_aborted)
+        return state_ > s_aborted;
+
+    // Read-only transactions with opacity can commit immediately
+    if (!any_writes_ && !any_nonopaque_) {
+        stop(true, nullptr, 0);
+        return true;
+    }
+
+    state_ = s_committing;
+
+    // Collect operations for Luigi dispatch
+    std::vector<int> table_ids;
+    std::vector<uint8_t> op_types;
+    std::vector<std::string> keys;
+    std::vector<std::string> values;
+
+    TransItem* it = nullptr;
+    for (unsigned tidx = 0; tidx != tset_size_; ++tidx) {
+        it = (tidx % tset_chunk ? it + 1 : tset_[tidx / tset_chunk]);
+        
+        int table_id = it->owner()->get_table_id();
+        
+        if (it->has_write()) {
+            std::string key = "", val = "";
+            if (hasInsertOp(it)) {
+                key = (*it).write_value<std::string>();
+                versioned_str_struct* vvx = (*it).key<versioned_str_struct*>();
+                val = std::string(vvx->data(), vvx->length());
+            } else {
+                key = it->extra;
+                val = (*it).template write_value<std::string>();
+            }
+            table_ids.push_back(table_id);
+            op_types.push_back(mako::LUIGI_OP_WRITE);
+            keys.push_back(key);
+            values.push_back(val);
+        } else if (it->has_read()) {
+            std::string key = it->extra;
+            table_ids.push_back(table_id);
+            op_types.push_back(mako::LUIGI_OP_READ);
+            keys.push_back(key);
+            values.push_back("");  // No value for reads
+        }
+    }
+
+    // If no operations to send, just commit
+    if (table_ids.empty()) {
+        stop(true, nullptr, 0);
+        return true;
+    }
+
+    // Determine involved shards from table_ids
+    std::vector<int> involved_shards;
+    uint64_t involved_shard_bits = 0;
+    for (int table_id : table_ids) {
+        int dst_shard = (table_id - 1) / mako::NUM_TABLES_PER_SHARD;
+        if (!(involved_shard_bits & (1ULL << dst_shard))) {
+            involved_shard_bits |= (1ULL << dst_shard);
+            involved_shards.push_back(dst_shard);
+        }
+    }
+
+    // Get expected timestamp using LuigiOWD service
+    // expected_time = current_time + max_owd(involved_shards) + headroom
+    uint64_t txn_id = (uint64_t(threadid_) << 48) | TThread::increment_id;
+    uint64_t expected_time = mako::luigi::LuigiOWD::getInstance().getExpectedTimestamp(involved_shards);
+
+    // Output maps for results
+    std::map<int, uint64_t> execute_timestamps;
+    std::map<int, std::vector<std::string>> read_results;
+
+    // Send to all involved shards and wait for responses
+    int status = TThread::sclient->remoteLuigiDispatch(
+        txn_id,
+        expected_time,
+        table_ids,
+        op_types,
+        keys,
+        values,
+        execute_timestamps,
+        read_results
+    );
+
+    if (status != 0) {
+        // Dispatch failed
+        TXP_INCREMENT(txp_commit_time_aborts);
+        stop(false, nullptr, 0);
+        return false;
+    }
+
+    // Check timestamp consensus: all shards must return the same execute timestamp
+    if (execute_timestamps.size() > 1) {
+        uint64_t first_ts = execute_timestamps.begin()->second;
+        for (const auto& kv : execute_timestamps) {
+            if (kv.second != first_ts) {
+                // Timestamp mismatch - abort
+                TXP_INCREMENT(txp_commit_time_aborts);
+                stop(false, nullptr, 0);
+                return false;
+            }
+        }
+    }
+
+    // Transaction committed successfully
+    // Update tid_unique_ with the execute timestamp
+    if (!execute_timestamps.empty()) {
+        tid_unique_ = static_cast<uint32_t>(execute_timestamps.begin()->second);
+    }
+
+    stop(true, nullptr, 0);
+    return true;
 }
 
 // serialize transactions into log and then sent it out via Paxos
