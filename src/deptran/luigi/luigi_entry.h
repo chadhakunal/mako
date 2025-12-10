@@ -39,6 +39,12 @@ enum LuigiAgreeStatus {
 };
 
 //=============================================================================
+// Operation Types
+//=============================================================================
+constexpr uint8_t LUIGI_OP_READ = 0;
+constexpr uint8_t LUIGI_OP_WRITE = 1;
+
+//=============================================================================
 // LuigiOp: A single read or write operation within a transaction
 //=============================================================================
 struct LuigiOp {
@@ -80,7 +86,8 @@ struct LuigiLogEntry {
   uint32_t bound_ = 0;      // Bound parameter from coordinator
 
   //--- For multi-shard txns: which shards are involved ---
-  std::set<uint32_t> involved_shards_;
+  std::set<uint32_t> involved_shards_;        // All partitions this txn touches
+  std::vector<uint32_t> remote_partitions_;   // Remote partitions (for leader agreement)
   uint32_t num_shards_ = 1;  // 1 = single-shard, >1 = multi-shard
 
   //--- Result storage ---

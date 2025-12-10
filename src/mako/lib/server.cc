@@ -63,6 +63,7 @@ namespace mako
         partition_id_ = partition_id;
         luigi_scheduler_ = new janus::SchedulerLuigi();
         luigi_scheduler_->SetPartitionId(partition_id);
+        luigi_scheduler_->SetDbTables(&open_tables_table_id);  // Pass DB tables reference
         luigi_scheduler_->Start();
         Log_info("Luigi scheduler initialized for partition %d", partition_id);
     }
