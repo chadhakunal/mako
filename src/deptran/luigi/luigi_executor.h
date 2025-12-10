@@ -81,18 +81,40 @@ class LuigiExecutor {
    * Perform leader agreement for multi-shard transactions.
    * 
    * In Tiga, when a txn touches multiple shards:
-   * 1. Each leader proposes its local_deadline
+   * 1. Each leader proposes its proposed_ts
    * 2. Leaders exchange proposals
-   * 3. All leaders agree on max(proposed_deadlines)
+   * 3. All leaders agree on max(proposed timestamps)
    * 4. Txn executes at the agreed timestamp
    * 
-   * @param entry The transaction entry (may update entry->agreed_deadline_)
-   * @return true if agreement succeeded, false on timeout/failure
+   * The 3-case outcome:
+   * Case 1: All proposals matched -> release immediately (0.5 WRTT)
+   * Case 2: This leader used agreed_ts -> WAIT for round 2 confirmation
+   * Case 3: This leader used smaller ts -> ROLLBACK, update ts, reposition
    * 
-   * PLACEHOLDER: Currently returns true immediately for single-shard txns.
+   * @param entry The transaction entry (may update entry->agreed_ts_)
+   * @return AgreementResult indicating next action
+   * 
+   * PLACEHOLDER: Currently returns success for single-shard txns.
    *              Multi-shard agreement requires RPC to other leaders.
    */
-  bool PerformLeaderAgreement(std::shared_ptr<LuigiLogEntry> entry);
+  enum class AgreementResult {
+    SUCCESS,           // Agreement complete, proceed with execution
+    WAIT_ROUND2,       // Case 2: Wait for confirmation (don't release yet)
+    NEEDS_ROLLBACK,    // Case 3: Rollback and reposition needed
+    FAILED             // Timeout or error
+  };
+  AgreementResult PerformLeaderAgreement(std::shared_ptr<LuigiLogEntry> entry);
+
+  /**
+   * Rollback speculative execution.
+   * 
+   * When agreement results in Case 3 (this leader used smaller ts),
+   * we need to undo the speculative writes and re-execute later.
+   * 
+   * @param entry The transaction entry with speculative_writes_ to undo
+   * @return 0 on success, -1 on error
+   */
+  int RollbackSpeculativeExecution(std::shared_ptr<LuigiLogEntry> entry);
 
   //===========================================================================
   // Read/Write Operations

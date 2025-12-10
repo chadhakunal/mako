@@ -16,26 +16,38 @@
 namespace janus {
 
 //=============================================================================
-// Execution Status (mirrors Tiga's EXEC_* states)
+// Execution Status (aligned with Tiga's EXEC_STATUS from TigaMessage.h)
 //=============================================================================
 enum LuigiExecStatus {
-  LUIGI_EXEC_INIT = 0,       // Not started
-  LUIGI_EXEC_SPEC = 1,       // Speculatively executing (before agreement)
-  LUIGI_EXEC_DIRECT = 2,     // Direct execution (agreement already done or single-shard)
-  LUIGI_EXEC_COMMITTING = 3, // Agreement succeeded, committing
-  LUIGI_EXEC_ROLLBACK = 4,   // Agreement failed, need to rollback
-  LUIGI_EXEC_DONE = 5,       // Execution complete
-  LUIGI_EXEC_ABANDONED = 6   // Txn abandoned (conflict, will not execute)
+  LUIGI_EXEC_INIT = 1,        // Not started (Tiga: EXEC_INIT)
+  LUIGI_EXEC_SPEC = 2,        // Speculatively executing (Tiga: EXEC_SPEC)
+  LUIGI_EXEC_COMMITTING = 3,  // Agreement done, committing (Tiga: EXEC_COMMITING)
+  LUIGI_EXEC_ROLLBACK = 4,    // Need to rollback spec exec (Tiga: EXEC_ROLLBACK)
+  LUIGI_EXEC_REPOSITIONED = 5,// After rollback, repositioned (Tiga: EXEC_REPOSITIONED)
+  LUIGI_EXEC_DIRECT = 6,      // Direct execution, no spec (Tiga: EXEC_DIRECT)
+  LUIGI_EXEC_COMPLETE = 7,    // Done (Tiga: EXEC_COMPLETE)
+  LUIGI_EXEC_ABANDONED = 8    // Abandoned due to conflict (Tiga: EXEC_ABANDONED)
 };
 
 //=============================================================================
 // Agreement Status (for multi-shard timestamp agreement)
+// Aligned with Tiga's AGREE_STATUS enum from TigaMessage.h
 //=============================================================================
 enum LuigiAgreeStatus {
-  LUIGI_AGREE_INIT = 0,      // Not started
-  LUIGI_AGREE_PENDING = 1,   // Waiting for other leaders
-  LUIGI_AGREE_COMPLETE = 2,  // All leaders agreed
-  LUIGI_AGREE_CONFLICT = 3   // Conflict detected, need to re-agree with updated timestamp
+  LUIGI_AGREE_INIT = 1,       // Not started (Tiga: AGREE_INIT)
+  
+  // When my proposed_ts != agreed_ts:
+  LUIGI_AGREE_FLUSHING = 2,   // I used smaller ts -> reposition in queue (Tiga: AGREE_FLUSHING)
+  
+  // When my proposed_ts == agreed_ts but others differ:
+  LUIGI_AGREE_CONFIRMING = 3, // I used agreed_ts, waiting for others (Tiga: AGREE_CONFIRMING)
+  
+  LUIGI_AGREE_COMPLETE = 4,   // All agreed, can commit (Tiga: AGREE_COMPLETE)
+  
+  // Debug/tracking states (like Tiga's AGREE_CHECK1/2/3)
+  LUIGI_AGREE_CHECK1 = 5,     // Single-shard fast path
+  LUIGI_AGREE_CHECK2 = 6,     // Multi-shard, all matched
+  LUIGI_AGREE_CHECK3 = 7      // Multi-shard, completed via agreement
 };
 
 //=============================================================================
@@ -57,56 +69,102 @@ struct LuigiOp {
 
 //=============================================================================
 // LuigiLogEntry: Container for one transaction as it flows through Luigi
+// Semantics aligned with Tiga's TigaLogEntry, with more intuitive naming
 //=============================================================================
 struct LuigiLogEntry {
   //--- Timestamps ---
-  uint64_t local_deadline_ = 0;   // Proposed timestamp (may be updated on conflict)
-  uint64_t agreed_deadline_ = 0;  // Final agreed timestamp (after multi-shard agreement)
+  uint64_t proposed_ts_ = 0;     // Proposed execution timestamp (send_time + bound)
+  uint64_t agreed_ts_ = 0;       // Final agreed timestamp (after multi-shard agreement)
+  uint64_t dequeue_ts_ = 0;      // For debug: timestamp when dequeued from priority queue
 
   //--- Status flags (atomic for thread-safe reads) ---
-  std::atomic<uint32_t> exec_status_{LUIGI_EXEC_INIT};
-  std::atomic<uint32_t> agree_status_{LUIGI_AGREE_INIT};
+  std::atomic<uint32_t> prev_agree_status_{LUIGI_AGREE_INIT};  // Previous agree status
+  std::atomic<uint32_t> agree_status_{LUIGI_AGREE_INIT};       // Current agreement status
+  std::atomic<uint32_t> exec_status_{LUIGI_EXEC_INIT};         // Execution status
+  
+  //--- Agreement tracking ---
+  std::atomic<bool> ts_agreed_{false};     // All shards agreed on timestamp?
+  std::atomic<bool> exec_agreed_{false};   // Execution outcome agreed?
+  uint32_t requeue_count_ = 0;             // How many times re-queued (for Case 3 repositioning)
 
   //--- Transaction identity ---
   txnid_t tid_ = 0;                              // Unique transaction ID
-  std::shared_ptr<Marshallable> cmd_ = nullptr;  // Command payload (optional, for deptran-style)
+  std::shared_ptr<Marshallable> cmd_ = nullptr;  // Command payload (for deptran-style)
 
   //--- Operations (parsed from request) ---
   std::vector<LuigiOp> ops_;                     // Read and write operations
 
   //--- Callback to return result to coordinator ---
   std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb_ = nullptr;
+  std::atomic<bool> awaiting_reply_{false};      // Waiting for commit reply?
 
-  //--- Keys touched by this txn on THIS shard (for conflict detection) ---
-  std::vector<uint32_t> local_keys_;
+  //--- Keys touched by this txn ---
+  std::vector<int32_t> local_keys_;              // Keys on THIS shard (for conflict detection)
+  // shard_id => keys touched on that shard (from coordinator)
+  std::map<uint32_t, std::set<int32_t>> shard_to_keys_;
 
   //--- Timing info ---
-  uint64_t send_time_ = 0;  // When coordinator sent the txn
-  uint32_t owd_ = 0;        // One-way delay (microseconds)
-  uint32_t bound_ = 0;      // Bound parameter from coordinator
+  uint64_t send_time_ = 0;   // When coordinator sent the txn
+  uint32_t owd_ = 0;         // One-way delay (microseconds)
+  uint32_t bound_ = 0;       // Bound parameter from coordinator
 
   //--- For multi-shard txns: which shards are involved ---
   std::set<uint32_t> involved_shards_;        // All partitions this txn touches
-  std::vector<uint32_t> remote_partitions_;   // Remote partitions (for leader agreement)
-  uint32_t num_shards_ = 1;  // 1 = single-shard, >1 = multi-shard
+  std::vector<uint32_t> remote_shards_;       // Remote partitions (for leader agreement)
 
+  //--- Log/Replication Related ---
+  uint32_t log_id_ = 0;           // Only synced log entries have log_id
+  uint32_t spec_log_id_ = 0;      // Only speculatively executed entries have this
+
+  //--- Reply status and mutex ---
+  std::atomic<uint32_t> reply_status_{0};
+  std::mutex reply_mutex_;
+  
   //--- Result storage ---
   TxnOutput output_;
   std::vector<std::string> read_results_;
 
   //--- Constructor ---
-  LuigiLogEntry(txnid_t tid = 0) : tid_(tid) {}
+  LuigiLogEntry(txnid_t tid = 0) 
+      : tid_(tid),
+        proposed_ts_(0),
+        agreed_ts_(0),
+        dequeue_ts_(0),
+        requeue_count_(0),
+        prev_agree_status_(LUIGI_AGREE_INIT),
+        agree_status_(LUIGI_AGREE_INIT),
+        exec_status_(LUIGI_EXEC_INIT),
+        ts_agreed_(false),
+        exec_agreed_(false),
+        awaiting_reply_(false),
+        send_time_(0),
+        owd_(0),
+        bound_(0),
+        log_id_(0),
+        spec_log_id_(0),
+        reply_status_(0) {}
 
   //--- Helper: Is this a multi-shard transaction? ---
-  bool IsMultiShard() const { return num_shards_ > 1; }
+  bool IsMultiShard() const { return shard_to_keys_.size() > 1; }
+
+  //--- Helper: Get number of shards ---
+  uint32_t NumShards() const { return shard_to_keys_.size(); }
+
+  //--- Helper: Unique ID string ---
+  std::string ID() const {
+    return "|" + std::to_string(tid_) + "|";
+  }
 
   //--- Helper: Debug string ---
   std::string DebugString() const {
     return "LuigiEntry[tid=" + std::to_string(tid_) +
-           ", deadline=" + std::to_string(local_deadline_) +
+           ", proposed_ts=" + std::to_string(proposed_ts_) +
+           ", agreed_ts=" + std::to_string(agreed_ts_) +
            ", ops=" + std::to_string(ops_.size()) +
            ", keys=" + std::to_string(local_keys_.size()) +
-           ", shards=" + std::to_string(num_shards_) + "]";
+           ", shards=" + std::to_string(NumShards()) +
+           ", agree=" + std::to_string(agree_status_.load()) +
+           ", exec=" + std::to_string(exec_status_.load()) + "]";
   }
 };
 

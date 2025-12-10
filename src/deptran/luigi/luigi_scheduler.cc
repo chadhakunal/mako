@@ -69,7 +69,7 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
   entry->send_time_ = send_time;
   entry->bound_ = bound;
-  entry->local_deadline_ = send_time + bound;
+  entry->proposed_ts_ = send_time + bound;
   entry->ops_ = ops;
   entry->reply_cb_ = reply_cb;
 
@@ -77,7 +77,7 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
   // We use a simple hash of (table_id, key) as the conflict key
   for (const auto& op : ops) {
     // Simple key hash: combine table_id and first few bytes of key
-    uint32_t conflict_key = op.table_id;
+    int32_t conflict_key = op.table_id;
     if (op.key.size() >= 4) {
       conflict_key ^= *reinterpret_cast<const uint32_t*>(op.key.data());
     }
@@ -100,13 +100,13 @@ void SchedulerLuigi::LuigiDispatch(txnid_t tx_id,
                                    std::shared_ptr<Marshallable> cmd,
                                    uint64_t send_time,
                                    uint32_t bound,
-                                   const std::vector<uint32_t>& local_keys,
+                                   const std::vector<int32_t>& local_keys,
                                    std::function<void(const TxnOutput&)> reply_cb) {
   auto entry = std::make_shared<LuigiLogEntry>(tx_id);
   entry->cmd_ = cmd;
   entry->send_time_ = send_time;
   entry->bound_ = bound;
-  entry->local_deadline_ = send_time + bound;
+  entry->proposed_ts_ = send_time + bound;
   entry->local_keys_ = local_keys;
   
   // Wrap the old-style callback
@@ -125,11 +125,45 @@ void SchedulerLuigi::LuigiDispatch(txnid_t tx_id,
 }
 
 //=============================================================================
+// RequeueForReposition: Called when agreement determines need for Case 3
+//
+// After a multi-shard agreement, if this leader used a smaller timestamp than
+// the agreed one, the txn needs to:
+// 1. Have its speculative execution rolled back (done by executor)
+// 2. Have its proposed_ts_ updated to agreed_ts_ (done by executor)
+// 3. Be repositioned in the priority queue (done here)
+//
+// We simply enqueue it back to incoming_txn_queue_ with AGREE_FLUSHING status.
+// HoldReleaseTd() will see this status and skip conflict detection, going
+// directly into priority_queue_ at the new timestamp.
+//=============================================================================
+
+void SchedulerLuigi::RequeueForReposition(std::shared_ptr<LuigiLogEntry> entry) {
+  // Validate state
+  if (entry->agree_status_.load() != LUIGI_AGREE_FLUSHING) {
+    Log_error("Luigi RequeueForReposition: txn %lu has wrong status %u (expected AGREE_FLUSHING)",
+              entry->tid_, entry->agree_status_.load());
+    return;
+  }
+  
+  Log_info("Luigi RequeueForReposition: txn %lu going back to queue with timestamp %lu",
+           entry->tid_, entry->proposed_ts_);
+  
+  // Put back in incoming queue - HoldReleaseTd will handle the repositioning
+  incoming_txn_queue_.enqueue(entry);
+}
+
+//=============================================================================
 // HoldReleaseTd: The Core of Luigi
 //
 // This thread runs in a loop and does two things:
 // 1. Pulls txns from incoming_txn_queue_, checks conflicts, adds to priority_queue_
 // 2. Releases txns from priority_queue_ when their deadline passes, sends to ready_txn_queue_
+//
+// Additional responsibility for agreement Case 3 (AGREE_FLUSHING):
+// - Txns that need repositioning come back with AGREE_FLUSHING status
+// - They go directly into priority_queue_ at their new (agreed) timestamp
+// - No conflict check needed - the agreed timestamp is final
 //=============================================================================
 
 void SchedulerLuigi::HoldReleaseTd() {
@@ -145,7 +179,31 @@ void SchedulerLuigi::HoldReleaseTd() {
     for (size_t i = 0; i < cnt; i++) {
       auto entry = entries[i];
       uint64_t txn_key = entry->tid_;
+      
+      //-----------------------------------------------------------------------
+      // Check if this is a repositioning after agreement (Case 3)
+      // In Tiga, this is the AGREE_FLUSHING state
+      //-----------------------------------------------------------------------
+      if (entry->agree_status_.load() == LUIGI_AGREE_FLUSHING) {
+        // This txn is being repositioned after agreement told us we need
+        // a larger timestamp. The agreed_ts_ is already set.
+        // Go directly into priority_queue_ without conflict check.
+        
+        // The txn already has the updated proposed_ts_ = agreed_ts_
+        // (set by the executor before returning to us)
+        
+        Log_info("Luigi HoldReleaseTd: Repositioning txn %lu at new timestamp %lu (requeue #%u)",
+                 entry->tid_, entry->proposed_ts_, entry->requeue_count_);
+        
+        // Insert at new position
+        priority_queue_[{entry->proposed_ts_, txn_key}] = entry;
+        continue;  // Skip normal conflict detection
+      }
 
+      //-----------------------------------------------------------------------
+      // Normal path: NEW txn entering for the first time
+      //-----------------------------------------------------------------------
+      
       // CONFLICT DETECTION (from Algorithm 1, line 1-4 in paper):
       // Find the maximum lastReleasedDeadline among all keys this txn touches
       uint64_t max_last_released = 0;
@@ -156,14 +214,14 @@ void SchedulerLuigi::HoldReleaseTd() {
         }
       }
 
-      // If txn's deadline is too small (conflict), update it
+      // If txn's timestamp is too small (conflict), update it
       // This is the LEADER PRIVILEGE: we can bump the timestamp
-      if (entry->local_deadline_ <= max_last_released) {
-        entry->local_deadline_ = max_last_released + 1;
+      if (entry->proposed_ts_ <= max_last_released) {
+        entry->proposed_ts_ = max_last_released + 1;
       }
 
-      // Insert into priority_queue_ (sorted by deadline, then txn_id)
-      priority_queue_[{entry->local_deadline_, txn_key}] = entry;
+      // Insert into priority_queue_ (sorted by timestamp, then txn_id)
+      priority_queue_[{entry->proposed_ts_, txn_key}] = entry;
     }
 
     //-------------------------------------------------------------------------
@@ -184,8 +242,8 @@ void SchedulerLuigi::HoldReleaseTd() {
 
       // Update lastReleasedDeadlines for all keys this txn touches
       for (auto& k : entry->local_keys_) {
-        if (last_released_deadlines_[k] < entry->local_deadline_) {
-          last_released_deadlines_[k] = entry->local_deadline_;
+        if (last_released_deadlines_[k] < entry->proposed_ts_) {
+          last_released_deadlines_[k] = entry->proposed_ts_;
         }
       }
 
