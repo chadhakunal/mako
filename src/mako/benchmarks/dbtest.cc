@@ -1,6 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <mako.hh>
+#include "luigi/luigi_owd.h"
 
 using namespace std;
 using namespace util;
@@ -10,6 +11,7 @@ static void parse_command_line_args(int argc,
                                     char **argv,
                                     int &is_micro,
                                     int &is_replicated,
+                                    int &use_luigi,
                                     string& site_name,
                                     vector<string>& paxos_config_file,
                                     string& local_shards_str)
@@ -29,6 +31,7 @@ static void parse_command_line_args(int argc,
       {"sync-dir"                   , required_argument , 0                          , 'S'} ,
       {"is-micro"                   , no_argument       , &is_micro                  ,   1} ,
       {"is-replicated"              , no_argument       , &is_replicated             ,   1} ,
+      {"use-luigi"                  , no_argument       , &use_luigi                 ,   1} ,
       {0, 0, 0, 0}
     };
     int option_index = 0;
@@ -293,13 +296,14 @@ main(int argc, char **argv)
   // Parameters prepared
   int is_micro = 0;  // Flag for micro benchmark mode
   int is_replicated = 0;  // if use Paxos to replicate
+  int use_luigi = 0;  // if use Luigi timestamp-ordered execution protocol
   vector<string> paxos_config_file{};
   string site_name = "";  // For new config format
   string local_shards_str = "";  // For multi-shard mode: comma-separated list
 
   auto& benchConfig = BenchmarkConfig::getInstance();
   // Parse command line arguments
-  parse_command_line_args(argc, argv, is_micro, is_replicated, site_name, paxos_config_file, local_shards_str);
+  parse_command_line_args(argc, argv, is_micro, is_replicated, use_luigi, site_name, paxos_config_file, local_shards_str);
 
   // Handle new configuration format if site name is provided
   if (!site_name.empty() && benchConfig.getConfig() != nullptr) {
@@ -308,7 +312,12 @@ main(int argc, char **argv)
 
   benchConfig.setIsMicro(is_micro);
   benchConfig.setIsReplicated(is_replicated);
+  benchConfig.setUseLuigi(use_luigi);
   benchConfig.setPaxosConfigFile(paxos_config_file);
+
+  if (use_luigi) {
+    Notice("Luigi timestamp-ordered execution protocol enabled");
+  }
 
   // Parse local shards if specified
   if (!local_shards_str.empty() && benchConfig.getConfig() != nullptr) {
@@ -328,6 +337,17 @@ main(int argc, char **argv)
   }
 
   init_env();
+
+  // Initialize and start Luigi OWD service if enabled
+  if (use_luigi && benchConfig.getConfig() != nullptr) {
+    auto& luigiOwd = mako::luigi::LuigiOWD::getInstance();
+    luigiOwd.init(
+        benchConfig.getConfig()->configFile,
+        benchConfig.getCluster(),
+        benchConfig.getShardIndex(),
+        benchConfig.getNshards());
+    luigiOwd.start();
+  }
 
   // Check if running in multi-shard mode
   if (benchConfig.getConfig() && benchConfig.getConfig()->multi_shard_mode) {
@@ -388,6 +408,11 @@ main(int argc, char **argv)
     if (benchConfig.getLeaderConfig()) {
       run_workers(db);
     }
+  }
+
+  // Stop Luigi OWD service if it was running
+  if (use_luigi) {
+    mako::luigi::LuigiOWD::getInstance().stop();
   }
 
   db_close() ;

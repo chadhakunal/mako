@@ -16,6 +16,79 @@ void register_sync_util_sc(std::function<int()>);
 
 namespace mako
 {
+    // Helper class for building Luigi dispatch requests
+    class LuigiDispatchRequestBuilder {
+    public:
+        LuigiDispatchRequestBuilder() {
+            request_ = new luigi_dispatch_request_t;
+            request_->num_ops = 0;
+            data_ptr_ = request_->ops_data;
+            msg_len_ = 0;
+        }
+
+        ~LuigiDispatchRequestBuilder() {
+            delete request_;
+        }
+
+        void set_header(uint16_t server_id, uint64_t txn_id, uint64_t expected_time) {
+            request_->target_server_id = server_id;
+            request_->txn_id = txn_id;
+            request_->expected_time = expected_time;
+        }
+
+        void set_req_nr(uint32_t req_nr) {
+            request_->req_nr = req_nr;
+        }
+
+        void add_op(uint16_t table_id, uint8_t op_type, 
+                   const std::string& key, const std::string& value) {
+            request_->num_ops++;
+            
+            // table_id (2 bytes)
+            memcpy(data_ptr_, &table_id, sizeof(uint16_t));
+            data_ptr_ += sizeof(uint16_t);
+            msg_len_ += sizeof(uint16_t);
+            
+            // op_type (1 byte)
+            memcpy(data_ptr_, &op_type, sizeof(uint8_t));
+            data_ptr_ += sizeof(uint8_t);
+            msg_len_ += sizeof(uint8_t);
+            
+            // klen (2 bytes)
+            uint16_t klen = key.size();
+            memcpy(data_ptr_, &klen, sizeof(uint16_t));
+            data_ptr_ += sizeof(uint16_t);
+            msg_len_ += sizeof(uint16_t);
+            
+            // vlen (2 bytes)
+            uint16_t vlen = value.size();
+            memcpy(data_ptr_, &vlen, sizeof(uint16_t));
+            data_ptr_ += sizeof(uint16_t);
+            msg_len_ += sizeof(uint16_t);
+            
+            // key data
+            memcpy(data_ptr_, key.c_str(), klen);
+            data_ptr_ += klen;
+            msg_len_ += klen;
+            
+            // value data
+            if (vlen > 0) {
+                memcpy(data_ptr_, value.c_str(), vlen);
+                data_ptr_ += vlen;
+                msg_len_ += vlen;
+            }
+        }
+
+        luigi_dispatch_request_t* get_request() { return request_; }
+        size_t get_total_size() { 
+            return sizeof(luigi_dispatch_request_t) - sizeof(request_->ops_data) + msg_len_; 
+        }
+
+    private:
+        luigi_dispatch_request_t* request_;
+        char* data_ptr_;
+        size_t msg_len_;
+    };
     using namespace std;
 
     class Client : public TransportReceiver
@@ -133,6 +206,14 @@ namespace mako
                             error_continuation_t error_continuation,
                             uint32_t timeout); 
 
+        // Luigi: timestamp-ordered execution dispatch
+        void InvokeLuigiDispatch(
+            uint64_t txn_nr,
+            std::map<int, LuigiDispatchRequestBuilder*>& requests_per_shard,
+                            resp_continuation_t continuation,
+                            error_continuation_t error_continuation,
+                            uint32_t timeout); 
+
         void HandleGetReply(char *respBuf);
         void HandleScanReply(char *respBuf);
         void HandleLockReply(char *respBuf);
@@ -146,6 +227,7 @@ namespace mako
         void HandleGetTimestamp(char *respBuf);
         void HandleWatermarkReply(char *respBuf);
         void HandleWarmupReply(char *respBuf);
+        void HandleLuigiDispatchReply(char *respBuf);
         size_t ReceiveRequest(uint8_t reqType, char *reqBuf, char *respBuf) override { PPanic("Not implemented."); };
         bool Blocked() override { return blocked; };
         void SetNumResponseWaiting(int num_response_waiting) { this->num_response_waiting = num_response_waiting; };
