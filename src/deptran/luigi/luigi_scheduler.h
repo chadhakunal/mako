@@ -58,8 +58,12 @@ class SchedulerLuigi : public SchedulerClassic {
                      std::shared_ptr<Marshallable> cmd,
                      uint64_t send_time,
                      uint32_t bound,
-                     const std::vector<uint32_t>& local_keys,
+                     const std::vector<int32_t>& local_keys,
                      std::function<void(const TxnOutput&)> reply_cb);
+
+  // Requeue a txn after agreement determines it needs repositioning (Case 3)
+  // This is called by the executor when AGREE_FLUSHING is needed
+  void RequeueForReposition(std::shared_ptr<LuigiLogEntry> entry);
 
  protected:
   // Threads
@@ -86,10 +90,10 @@ class SchedulerLuigi : public SchedulerClassic {
 
   //==========================================================================
   // Per-key last released deadline tracking (for conflict detection)
-  // Key = application key (uint32_t), Value = last released timestamp
+  // Key = application key (int32_t like Tiga), Value = last released timestamp
   // This combines rMap and wMap from the paper into one (simplified)
   //==========================================================================
-  std::unordered_map<uint32_t, uint64_t> last_released_deadlines_;
+  std::unordered_map<int32_t, uint64_t> last_released_deadlines_;
 
   //==========================================================================
   // READY TXN QUEUE (lock-free)
