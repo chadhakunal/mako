@@ -9,7 +9,7 @@
 #include "benchmarks/sto/sync_util.hh"
 #include "lib/common.h"
 #include "benchmarks/benchmark_config.h"
-#include "luigi/luigi_owd.h"
+#include "deptran/luigi/luigi_owd.h"
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))

@@ -1,6 +1,5 @@
 
 #include <iostream>
-#include <chrono>
 #include "lib/fasttransport.h"
 #include "lib/promise.h"
 #include "lib/client.h"
@@ -8,7 +7,6 @@
 #include "lib/configuration.h"
 #include "lib/common.h"
 #include "benchmarks/sto/Interface.hh"
-#include "luigi/luigi_owd.h"
 
 namespace mako
 {
@@ -114,7 +112,7 @@ namespace mako
         if (waiting != nullptr) {
             Promise *w = waiting;
             waiting = nullptr;
-            w->Reply(ErrorCode::TIMEOUT);
+            w->Reply(MakoErrorCode::TIMEOUT);
         }
     }
 
@@ -134,16 +132,16 @@ namespace mako
     }
 
     void ShardClient::SendToAllGiveUpTimeout() {
-        status_received.push_back((int) ErrorCode::TIMEOUT);
+        status_received.push_back((int) MakoErrorCode::TIMEOUT);
     }
 
     bool ShardClient::is_all_response_ok() {
         bool ok = true;
-        for (auto code: status_received) ok &= (code == ErrorCode::SUCCESS);
+        for (auto code: status_received) ok &= (code == MakoErrorCode::OK);
         status_received.clear();
         for (int i=0;i<(int)int_received.size(); i++)
             int_received[i] = 0;
-        return ok ? ErrorCode::SUCCESS : ErrorCode::ERROR;
+        return ok ? MakoErrorCode::OK : MakoErrorCode::ERROR;
     }
 
     void ShardClient::calculate_num_response_waiting(int shards_to_send_bits) {
@@ -242,7 +240,7 @@ namespace mako
         vector<string> &value_batch
     ) {
         if (remote_table_id_batch.empty())
-            return ErrorCode::SUCCESS;
+            return MakoErrorCode::OK;
 
         map<int, BatchLockRequestWrapper> request_batch_per_shard;
         uint16_t server_id = shardIndex * config.warehouses + par_id;
@@ -306,7 +304,7 @@ namespace mako
 
     int ShardClient::remoteValidate(uint32_t &watermark) {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -331,7 +329,7 @@ namespace mako
         // Single timestamp encoding - no vector needed
         char *cc = encode_single_timestamp(timestamp);
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -363,73 +361,7 @@ namespace mako
         for (int i=0; i<(int)int_received.size(); i++) {
             ret_value += int_received[i];
         }
-        return is_all_response_ok();
-    }
-
-    int ShardClient::checkRemoteShardReady(int dstShardIndex) {
-        // Use warmup mechanism to ping a specific remote shard
-        // If the shard responds, it's ready; otherwise timeout/error
-        uint32_t ret_value = 0;
-        uint64_t set_bits = (1ULL << dstShardIndex);  // Target only this shard
-        uint8_t centerId = clusterRole;  // Use our cluster role
-
-        // Use a shorter timeout for readiness check (1 second)
-        calculate_num_response_waiting_no_skip(set_bits);
-        uint16_t server_id = 0;  // Readiness check doesn't need specific server
-
-        for (int i=0; i<(int)int_received.size(); i++) int_received[i]=0;
-        client->InvokeWarmup(++tid,
-                            0,  // req_val = 0 for readiness check
-                            centerId,
-                            set_bits,
-                            server_id,
-                            bind(&ShardClient::SendToAllIntCallBack, this, placeholders::_1),
-                            bind(&ShardClient::SendToAllGiveUpTimeout, this),
-                            1000);  // 1 second timeout for readiness check
-        return is_all_response_ok();
-    }
-
-    void ShardClient::remotePingForOWD() {
-        // Ping all remote shards to measure RTT and update OWD table
-        auto& luigiOwd = luigi::LuigiOWD::getInstance();
-        if (!luigiOwd.isInitialized()) {
-            return;  // OWD service not initialized
-        }
-
-        auto remote_shards = luigiOwd.getRemoteShards();
-        uint8_t centerId = clusterRole;
-        uint16_t server_id = 0;
-
-        for (int dst_shard : remote_shards) {
-            uint64_t set_bits = (1ULL << dst_shard);
-            
-            // Record start time
-            auto start_time = std::chrono::steady_clock::now();
-            
-            // Send ping (reuse warmup mechanism)
-            calculate_num_response_waiting_no_skip(set_bits);
-            for (int i = 0; i < (int)int_received.size(); i++) int_received[i] = 0;
-            
-            client->InvokeWarmup(++tid,
-                                0,  // req_val = 0 for ping
-                                centerId,
-                                set_bits,
-                                server_id,
-                                bind(&ShardClient::SendToAllIntCallBack, this, placeholders::_1),
-                                bind(&ShardClient::SendToAllGiveUpTimeout, this),
-                                BASIC_TIMEOUT);
-            
-            // Calculate RTT
-            auto end_time = std::chrono::steady_clock::now();
-            uint64_t rtt_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                end_time - start_time
-            ).count();
-            
-            // Only update OWD if ping succeeded
-            if (is_all_response_ok()) {
-                luigiOwd.updateOWD(dst_shard, rtt_ms);
-            }
-        }
+        return is_all_response_ok(); 
     }
 
     int ShardClient::remoteControl(int control, uint32_t value, uint32_t &ret_value, uint64_t set_bits) {
@@ -475,7 +407,7 @@ namespace mako
 
     int ShardClient::remoteUnLock() {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -490,7 +422,7 @@ namespace mako
 
     int ShardClient::remoteGetTimestamp(uint32_t &timestamp) {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -515,7 +447,7 @@ namespace mako
         // Single timestamp encoding - no vector needed
         char *cc = encode_single_timestamp(timestamp);
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -535,7 +467,7 @@ namespace mako
         if (TThread::trans_nosend_abort > 0){
             shards_to_send_bits = shards_to_send_bits ^ TThread::trans_nosend_abort;
         }
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -549,33 +481,18 @@ namespace mako
     }
 
     //=========================================================================
-    // Luigi: Timestamp-ordered execution
+    // Luigi: Timestamp-ordered execution dispatch
     //=========================================================================
-    // TODO: Currently uses blocking model (waits for all shard responses).
-    // Future improvement: Implement pipelined/async model where:
-    //   1. Coordinator sends txn with expected_time, doesn't block
-    //   2. Continues sending new transactions
-    //   3. Server executes when current_time >= expected_time, responds async
-    //   4. Coordinator processes responses via callbacks, decides commit/abort
-    // This requires: PendingLuigiTxn tracking, completion callbacks, 
-    // and restructuring Transaction.cc commit flow.
-
+    
     void ShardClient::LuigiDispatchCallback(char *respBuf) {
         auto *resp = reinterpret_cast<luigi_dispatch_response_t *>(respBuf);
-        
-        // Store status
         status_received.push_back(resp->status);
-        
-        // Find which shard this response is from based on txn context
-        // For now, we track by order received - the caller matches by shard
-        // Store commit timestamp (we'll map to shard in the main function)
-        // Using a simple approach: store in a vector, match by response order
         
         // Parse read results from response
         std::vector<std::string> read_values;
-        char *data_ptr = resp->results_data;
+        char* data_ptr = resp->results_data;
         for (uint16_t i = 0; i < resp->num_results; i++) {
-            // Each result: [vlen(2) | value]
+            // Read value length (2 bytes)
             uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
             data_ptr += sizeof(uint16_t);
             read_values.emplace_back(data_ptr, vlen);
@@ -599,7 +516,7 @@ namespace mako
         std::map<int, std::vector<std::string>>& out_read_results)
     {
         if (table_ids.empty()) {
-            return ErrorCode::SUCCESS;
+            return MakoErrorCode::OK;
         }
 
         // Clear previous luigi response storage
@@ -657,12 +574,15 @@ namespace mako
             delete kv.second;
         }
 
+        // Wait for responses
+        promise.GetReply();
+        waiting = nullptr;
+
         // Map responses back to shards
-        // Responses come back in the order shards were added to shard_order
-        for (size_t i = 0; i < shard_order.size() && i < luigi_execute_timestamps_.size(); i++) {
+        for (size_t i = 0; i < shard_order.size() && i < status_received.size(); i++) {
             int shard_idx = shard_order[i];
             out_execute_timestamps[shard_idx] = luigi_execute_timestamps_[i];
-            out_read_results[shard_idx] = std::move(luigi_read_results_[i]);
+            out_read_results[shard_idx] = luigi_read_results_[i];
         }
 
         return is_all_response_ok();

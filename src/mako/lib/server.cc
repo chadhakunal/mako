@@ -3,6 +3,8 @@
 #include <chrono>
 #include <thread>
 #include <algorithm>
+#include <mutex>
+#include <condition_variable>
 #include "lib/fasttransport.h"
 #include "lib/timestamp.h"
 #include "lib/server.h"
@@ -12,9 +14,18 @@
 #include "benchmarks/common.h"
 #include "benchmarks/bench.h"
 #include "benchmarks/tpcc.h"
+#include "benchmarks/benchmark_config.h"
 #include <x86intrin.h>
 #include "deptran/s_main.h"
 #include "benchmarks/sto/sync_util.hh"
+
+// Luigi (Tiga-style) scheduler
+#include "deptran/luigi/luigi_entry.h"
+#include "deptran/luigi/luigi_scheduler.h"
+#include "deptran/luigi/luigi_rpc_setup.h"
+
+// rrr RPC framework (for Luigi leader agreement)
+#include "rrr/rrr.hpp"
 
 std::function<int()> ss_callback_ = nullptr;
 void register_sync_util_ss(std::function<int()> cb) {
@@ -28,6 +39,7 @@ namespace mako
     ShardReceiver::ShardReceiver(std::string file) : config(file)
     {
         current_term = 0;
+        luigi_scheduler_ = nullptr;
     }
 
     void ShardReceiver::Register(abstract_db *dbX,
@@ -44,6 +56,110 @@ namespace mako
         obj_key0.reserve(128);
         obj_key1.reserve(128);
         obj_v.reserve(256);
+    }
+
+    //=========================================================================
+    // Luigi Scheduler Management
+    //=========================================================================
+    void ShardReceiver::InitLuigiScheduler(uint32_t partition_id) {
+        if (luigi_scheduler_ != nullptr) {
+            return;  // Already initialized
+        }
+        partition_id_ = partition_id;
+        luigi_scheduler_ = new janus::SchedulerLuigi();
+        luigi_scheduler_->SetPartitionId(partition_id);
+        
+        // Set up callbacks that delegate to Mako's DB operations
+        // Capture 'this' to access open_tables_table_id
+        luigi_scheduler_->SetReadCallback(
+            [this](int table_id, const std::string& key, std::string& value_out) -> bool {
+                auto it = open_tables_table_id.find(table_id);
+                if (it == open_tables_table_id.end() || it->second == nullptr) {
+                    return false;
+                }
+                return it->second->shard_get(lcdf::Str(key), value_out);
+            }
+        );
+        
+        luigi_scheduler_->SetWriteCallback(
+            [this](int table_id, const std::string& key, const std::string& value) -> bool {
+                auto it = open_tables_table_id.find(table_id);
+                if (it == open_tables_table_id.end() || it->second == nullptr) {
+                    return false;
+                }
+                try {
+                    it->second->shard_put(lcdf::Str(key), value);
+                    return true;
+                } catch (...) {
+                    return false;
+                }
+            }
+        );
+        
+        // Replication callback - TODO: integrate with add_log_to_nc
+        luigi_scheduler_->SetReplicationCallback(
+            [this](const std::shared_ptr<janus::LuigiLogEntry>& entry) -> bool {
+                // TODO: Serialize entry and call add_log_to_nc
+                // For now, just return success (replication not yet implemented)
+                return true;
+            }
+        );
+        
+        luigi_scheduler_->Start();
+        Log_info("Luigi scheduler initialized for partition %d", partition_id);
+    }
+
+    void ShardReceiver::SetupLuigiRpc(
+        rrr::Server* rpc_server,
+        rusty::Arc<rrr::PollThread> poll_thread,
+        const std::map<uint32_t, std::string>& shard_addresses) {
+        
+        if (luigi_scheduler_ == nullptr) {
+            Log_error("SetupLuigiRpc: Luigi scheduler not initialized!");
+            return;
+        }
+        
+        if (luigi_rpc_setup_ != nullptr) {
+            Log_warn("SetupLuigiRpc: Already set up");
+            return;
+        }
+        
+        luigi_rpc_setup_ = new janus::LuigiRpcSetup();
+        
+        // Register the RPC service so we can receive proposals from other leaders
+        if (rpc_server != nullptr) {
+            bool ok = luigi_rpc_setup_->SetupService(rpc_server, luigi_scheduler_);
+            if (!ok) {
+                Log_error("SetupLuigiRpc: Failed to register service");
+            }
+        } else {
+            Log_warn("SetupLuigiRpc: No RPC server provided, skipping service registration");
+        }
+        
+        // Connect to other shard leaders
+        if (!shard_addresses.empty() && poll_thread) {
+            int connected = luigi_rpc_setup_->ConnectToLeaders(
+                shard_addresses, poll_thread, luigi_scheduler_);
+            Log_info("Luigi RPC: connected to %d remote leaders", connected);
+        } else {
+            Log_info("Luigi RPC: No remote shard addresses provided (single-shard mode)");
+        }
+    }
+
+    void ShardReceiver::StopLuigiScheduler() {
+        // Clean up RPC first
+        if (luigi_rpc_setup_ != nullptr) {
+            luigi_rpc_setup_->Shutdown();
+            delete luigi_rpc_setup_;
+            luigi_rpc_setup_ = nullptr;
+        }
+        
+        if (luigi_scheduler_ != nullptr) {
+            luigi_scheduler_->Stop();
+            delete luigi_scheduler_;
+            luigi_scheduler_ = nullptr;
+            Log_info("Luigi scheduler stopped for partition %d", partition_id_);
+        }
     }
 
     void ShardReceiver::UpdateTableEntry(int table_id, abstract_ordered_index *table)
@@ -90,6 +206,9 @@ namespace mako
         case batchLockReqType:
             HandleBatchLockRequest(reqBuf, respBuf, respLen);
             break;
+        case luigiDispatchReqType:
+            HandleLuigiDispatch(reqBuf, respBuf, respLen);
+            break;
         default:
             Warning("Unrecognized rquest type: %d", reqType);
         }
@@ -99,13 +218,13 @@ namespace mako
 
     void ShardReceiver::HandleAbortRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         auto *req = reinterpret_cast<basic_request_t *>(reqBuf);
         db->shard_abort_txn(nullptr);
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         db->shard_reset();
 
@@ -114,26 +233,26 @@ namespace mako
     void ShardReceiver::HandleUnLockRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
         Panic("Deprecated!");
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         auto *req = reinterpret_cast<basic_request_t *>(reqBuf);
         try {
             db->shard_unlock(true);
         } catch (abstract_db::abstract_abort_exception &ex) {
             //db->shard_abort_txn(nullptr);
-            status = ErrorCode::ABORT;
+            status = MakoErrorCode::ABORT;
             Warning("HandleUnLockRequest error");
         }
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         db->shard_reset();
     }
 
     void ShardReceiver::HandleInstallRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         auto *req = reinterpret_cast<vector_int_request_t *>(reqBuf);
         try {
             // Single timestamp system: decode single timestamp directly
@@ -143,20 +262,20 @@ namespace mako
             db->shard_unlock(true);
         } catch (abstract_db::abstract_abort_exception &ex) {
             //db->shard_abort_txn(nullptr);
-            status = ErrorCode::ABORT;
+            status = MakoErrorCode::ABORT;
             Warning("HandleInstallRequest error");
         }
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         db->shard_reset();
     }
 
     void ShardReceiver::HandleValidateRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         auto *req = reinterpret_cast<basic_request_t *>(reqBuf);
         try {
             status = db->shard_validate();
@@ -165,34 +284,34 @@ namespace mako
             }
         } catch (abstract_db::abstract_abort_exception &ex) {
             //db->shard_abort_txn(nullptr);
-            status = ErrorCode::ABORT;
+            status = MakoErrorCode::ABORT;
             Warning("HandleValidateRequest error");
         }
 
         auto *resp = reinterpret_cast<get_int_response_t *>(respBuf);
         respLen = sizeof(get_int_response_t);
         resp->result = sync_util::sync_logger::retrieveShardW();
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->shard_index = TThread::get_shard_index();
         resp->req_nr = req->req_nr;
     }
 
     void ShardReceiver::HandleGetTimestampRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         uint32_t result = 0;
         auto *req = reinterpret_cast<basic_request_t*>(reqBuf);
         auto *resp = reinterpret_cast<get_int_response_t *>(respBuf);
         resp->shard_index = TThread::get_shard_index();
         resp->req_nr = req->req_nr;
         respLen = sizeof(get_int_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->result = __sync_fetch_and_add(&sync_util::sync_logger::local_replica_id, 1);;
     }
 
     void ShardReceiver::HandleSerializeUtilRequest(char *reqBuf, char *respBuf, size_t &respLen) {
         Panic("Deprecated");
-        // int status = ErrorCode::SUCCESS;
+        // int status = MakoErrorCode::OK;
         // auto *req = reinterpret_cast<vector_int_request_t *>(reqBuf);
         // std::vector<uint32_t> ret;
         // decode_vec_uint32(req->value, TThread::get_nshards()).swap(ret);
@@ -200,14 +319,14 @@ namespace mako
 
         // auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         // respLen = sizeof(basic_response_t);
-        // resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        // resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         // resp->req_nr = req->req_nr;
     }
 
     void ShardReceiver::HandleBatchLockMicroMegaRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
         auto *req = reinterpret_cast<batch_lock_request_t *>(reqBuf);
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
 
         uint16_t table_id, klen, vlen;
         char *k_ptr, *v_ptr;
@@ -230,7 +349,7 @@ namespace mako
                         open_tables_table_id[table_id]->shard_put(EncodeK(obj_key0, k_s_new), obj_v);
                     }
                 } catch (abstract_db::abstract_abort_exception &ex) {
-                   status = ErrorCode::ABORT;
+                   status = MakoErrorCode::ABORT;
                    Debug("HandleBatchLockMicroMegaRequest: fail to lock a key");
                 }
             }
@@ -238,14 +357,14 @@ namespace mako
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
     }
 
     void ShardReceiver::HandleBatchLockMegaRequest(char *reqBuf, char *respBuf, size_t &respLen)
     {
         auto *req = reinterpret_cast<batch_lock_request_t *>(reqBuf);
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
 
         uint16_t table_id, klen, vlen;
         char *k_ptr, *v_ptr;
@@ -269,7 +388,7 @@ namespace mako
                     }
                 } catch (abstract_db::abstract_abort_exception &ex) {
                    //db->shard_abort_txn(nullptr);
-                   status = ErrorCode::ABORT;
+                   status = MakoErrorCode::ABORT;
                    Debug("HandleLockRequest: fail to lock a key");
                 }
             }
@@ -277,7 +396,7 @@ namespace mako
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
     }
 
@@ -289,7 +408,7 @@ namespace mako
         HandleBatchLockMicroMegaRequest(reqBuf, respBuf, respLen);
 #else
         auto *req = reinterpret_cast<batch_lock_request_t *>(reqBuf);
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
 
         uint16_t table_id, klen, vlen;
         char *k_ptr, *v_ptr;
@@ -307,7 +426,7 @@ namespace mako
                     open_tables_table_id[table_id]->shard_put(obj_key0, obj_v);
                 } catch (abstract_db::abstract_abort_exception &ex) {
                    //db->shard_abort_txn(nullptr);
-                   status = ErrorCode::ABORT;
+                   status = MakoErrorCode::ABORT;
                    Debug("HandleLockRequest: fail to lock a key");
                 }
             }
@@ -315,7 +434,7 @@ namespace mako
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
 #endif
     }
@@ -331,21 +450,21 @@ namespace mako
         obj_v.assign(req->key_and_value + req->klen, req->vlen);
 
         int table_id = req->table_id;
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
 
         if (table_id > 0) {
             try {
                 open_tables_table_id[table_id]->shard_put(obj_key0, obj_v);
             } catch (abstract_db::abstract_abort_exception &ex) {
                 //db->shard_abort_txn(nullptr);
-                status = ErrorCode::ABORT;
+                status = MakoErrorCode::ABORT;
                 Debug("HandleLockRequest: fail to lock a key");
             }
         }
 
         auto *resp = reinterpret_cast<basic_response_t *>(respBuf);
         respLen = sizeof(basic_response_t);
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
     }
 
@@ -360,7 +479,7 @@ namespace mako
         // const std::string start_key = string(req->start_end_key, req->slen);
         // const std::string end_key = string(req->start_end_key+req->slen, req->elen);
 
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
 
         static_limit_callback<512> c(s_arena.get(), true); // probably a safe bet for now, NMaxCustomerIdxScanElems
         if (req->table_id > 0) {
@@ -378,7 +497,7 @@ namespace mako
                 }
             } catch (abstract_db::abstract_abort_exception &ex) {
                 db->shard_abort_txn(nullptr);
-                status = ErrorCode::ABORT;
+                status = MakoErrorCode::ABORT;
             }
         } else {
             val = "this is a mocked value for erpc_client and erpc_server";
@@ -386,7 +505,7 @@ namespace mako
         
         auto *resp = reinterpret_cast<scan_response_t *>(respBuf);
         respLen = sizeof(scan_response_t) - max_value_length + val.length();
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         resp->len = val.length();
         memcpy(resp->value, val.c_str(), val.length());
@@ -405,7 +524,7 @@ namespace mako
         int value_size = 8;
         c_v.resize(value_size);
 
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         if (req->table_id > 0) {
             try {
                 bool ret = true;
@@ -420,12 +539,12 @@ namespace mako
                 // abort here,
                 if (!ret){ // key not found or found but invalid
                     db->shard_abort_txn(nullptr);
-                    status = ErrorCode::ABORT;
+                    status = MakoErrorCode::ABORT;
                 }
             } catch (abstract_db::abstract_abort_exception &ex) {
                 // No need to abort, the client side will issue an abort
                 db->shard_abort_txn(nullptr);
-                status = ErrorCode::ABORT;
+                status = MakoErrorCode::ABORT;
             }
         } else {
             obj_v = "this is a mocked value for erpc_client and erpc_server";
@@ -434,7 +553,7 @@ namespace mako
         auto *resp = reinterpret_cast<get_response_t *>(respBuf);
         respLen = sizeof(get_response_t) - max_value_length + c_v.length();
         ALWAYS_ASSERT(max_value_length>=obj_v.length());
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         resp->len = c_v.length();
         //Warning("the remoteGET,len:%d,table_id:%d,keys:%s,key_len:%d,val_len:%d",obj_v.length(),req->table_id,mako::printStringAsBit(obj_key0).c_str(),req->len,obj_v.length());
@@ -456,7 +575,7 @@ namespace mako
         int offset = 0;
         c_v.resize(tol_len);
 
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         if (req->table_id > 0) {
             try {
                 bool ret = true;
@@ -473,12 +592,12 @@ namespace mako
                 //  "not found a key" maybe a expected behavior
                 if (!ret){ // key not found or found but invalid
                     db->shard_abort_txn(nullptr);
-                    status = ErrorCode::ABORT;
+                    status = MakoErrorCode::ABORT;
                 }
             } catch (abstract_db::abstract_abort_exception &ex) {
                 // No need to abort, the client side will issue an abort
                 db->shard_abort_txn(nullptr);
-                status = ErrorCode::ABORT;
+                status = MakoErrorCode::ABORT;
             }
         } else {
             obj_v = "this is a mocked value for erpc_client and erpc_server";
@@ -487,7 +606,7 @@ namespace mako
         auto *resp = reinterpret_cast<get_response_t *>(respBuf);
         respLen = sizeof(get_response_t) - max_value_length + c_v.length();
         ALWAYS_ASSERT(max_value_length>=obj_v.length());
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         resp->len = c_v.length();
         //Warning("the remoteGET,len:%d,table_id:%d,keys:%s,key_len:%d,val_len:%d",obj_v.length(),req->table_id,mako::printStringAsBit(obj_key0).c_str(),req->len,obj_v.length());
@@ -507,13 +626,13 @@ namespace mako
 #endif
         obj_key0.assign(req->key, req->len);
 
-        int status = ErrorCode::SUCCESS;
+        int status = MakoErrorCode::OK;
         if (req->table_id > 0) {
             // Check if table exists (may not exist in micro benchmark mode)
             auto it = open_tables_table_id.find(req->table_id);
             if (it == open_tables_table_id.end() || it->second == nullptr) {
                 db->shard_abort_txn(nullptr);
-                status = ErrorCode::ABORT;
+                status = MakoErrorCode::ABORT;
             } else {
                 try {
                     bool ret = it->second->shard_get(obj_key0, obj_v);
@@ -521,12 +640,12 @@ namespace mako
                     //  "not found a key" maybe a expected behavior
                     if (!ret){ // key not found or found but invalid
                         db->shard_abort_txn(nullptr);
-                        status = ErrorCode::ABORT;
+                        status = MakoErrorCode::ABORT;
                     }
                 } catch (abstract_db::abstract_abort_exception &ex) {
                     // No need to abort, the client side will issue an abort
                     db->shard_abort_txn(nullptr);
-                    status = ErrorCode::ABORT;
+                    status = MakoErrorCode::ABORT;
                 }
             }
         } else {
@@ -536,7 +655,7 @@ namespace mako
         auto *resp = reinterpret_cast<get_response_t *>(respBuf);
         respLen = sizeof(get_response_t) - max_value_length + obj_v.length();
         ALWAYS_ASSERT(max_value_length>=obj_v.length());
-        resp->status = (current_term > req->req_nr % 10)? ErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
+        resp->status = (current_term > req->req_nr % 10)? MakoErrorCode::ABORT: status; // If a reqest comes from old epoch, reject it.;
         resp->req_nr = req->req_nr;
         resp->len = obj_v.length();
         //Warning("the remoteGET,len:%d,table_id:%d,keys:%s,key_len:%d,val_len:%d",obj_v.length(),req->table_id,mako::printStringAsBit(obj_key0).c_str(),req->len,obj_v.length());
@@ -566,6 +685,12 @@ namespace mako
         queue_response = queueY;
         open_tables_table_id = open_tablesX;
         shardReceiver->Register(db, open_tables_table_id);
+        
+        // Initialize Luigi scheduler only when --use-luigi flag is enabled
+        if (BenchmarkConfig::getInstance().getUseLuigi()) {
+            // par_id serves as the partition_id for this server
+            shardReceiver->InitLuigiScheduler(par_id);
+        }
     }
 
     void ShardServer::UpdateTable(int table_id, abstract_ordered_index *table)
@@ -574,6 +699,123 @@ namespace mako
             open_tables_table_id[table_id] = table;
         }
         shardReceiver->UpdateTableEntry(table_id, table);
+    }
+
+    //=========================================================================
+    // HandleLuigiDispatch: Luigi (Tiga-style) timestamp-ordered execution
+    //
+    // This handler receives a transaction with a future timestamp deadline,
+    // parses the operations, and dispatches to the Luigi scheduler.
+    // The scheduler will queue the transaction and execute it when its
+    // deadline arrives, in timestamp order.
+    //=========================================================================
+    void ShardReceiver::HandleLuigiDispatch(char *reqBuf, char *respBuf, size_t &respLen)
+    {
+        auto *req = reinterpret_cast<luigi_dispatch_request_t *>(reqBuf);
+        
+        // Parse operations from request
+        // Format: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
+        std::vector<janus::LuigiOp> ops;
+        char *data_ptr = req->ops_data;
+        
+        for (uint16_t i = 0; i < req->num_ops; i++) {
+            janus::LuigiOp op;
+            
+            // Read table_id (2 bytes)
+            op.table_id = *reinterpret_cast<uint16_t*>(data_ptr);
+            data_ptr += sizeof(uint16_t);
+            
+            // Read op_type (1 byte): 0=read, 1=write
+            op.op_type = *reinterpret_cast<uint8_t*>(data_ptr);
+            data_ptr += sizeof(uint8_t);
+            
+            // Read key length (2 bytes)
+            uint16_t klen = *reinterpret_cast<uint16_t*>(data_ptr);
+            data_ptr += sizeof(uint16_t);
+            
+            // Read value length (2 bytes)
+            uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
+            data_ptr += sizeof(uint16_t);
+            
+            // Read key
+            op.key.assign(data_ptr, klen);
+            data_ptr += klen;
+            
+            // Read value (for writes)
+            if (vlen > 0) {
+                op.value.assign(data_ptr, vlen);
+                data_ptr += vlen;
+            }
+            
+            ops.push_back(op);
+        }
+        
+        // Prepare response buffer
+        auto *resp = reinterpret_cast<luigi_dispatch_response_t *>(respBuf);
+        resp->req_nr = req->req_nr;
+        resp->txn_id = req->txn_id;
+        respLen = sizeof(luigi_dispatch_response_t);
+        
+        // Check if Luigi scheduler is initialized
+        if (luigi_scheduler_ == nullptr) {
+            Warning("Luigi scheduler not initialized, rejecting request");
+            resp->status = MakoErrorCode::ABORT;
+            resp->commit_timestamp = 0;
+            resp->num_results = 0;
+            return;
+        }
+        
+        // For synchronous execution: use a condition variable to wait for completion
+        std::mutex completion_mutex;
+        std::condition_variable completion_cv;
+        bool completed = false;
+        int result_status = MakoErrorCode::OK;
+        uint64_t result_commit_ts = 0;
+        std::vector<std::string> result_read_values;
+        
+        // Dispatch to Luigi scheduler with completion callback
+        // expected_time is the timestamp at which the transaction should execute
+        luigi_scheduler_->LuigiDispatchFromRequest(
+            req->txn_id,
+            req->expected_time,
+            ops,
+            [&](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
+                std::lock_guard<std::mutex> lock(completion_mutex);
+                result_status = status;
+                result_commit_ts = commit_ts;
+                result_read_values = read_results;
+                completed = true;
+                completion_cv.notify_one();
+            }
+        );
+        
+        // Wait for completion (with timeout)
+        {
+            std::unique_lock<std::mutex> lock(completion_mutex);
+            // Wait up to 10 seconds for completion
+            if (!completion_cv.wait_for(lock, std::chrono::seconds(10), [&]{ return completed; })) {
+                Warning("Luigi dispatch timeout for txn %lu", req->txn_id);
+                resp->status = MakoErrorCode::ABORT;
+                resp->commit_timestamp = 0;
+                resp->num_results = 0;
+                return;
+            }
+        }
+        
+        // Populate response
+        resp->status = result_status;
+        resp->commit_timestamp = result_commit_ts;
+        resp->num_results = result_read_values.size();
+        
+        // Copy read results to response buffer
+        char* results_ptr = resp->results_data;
+        for (const auto& val : result_read_values) {
+            uint16_t vlen = val.size();
+            memcpy(results_ptr, &vlen, sizeof(uint16_t));
+            results_ptr += sizeof(uint16_t);
+            memcpy(results_ptr, val.data(), vlen);
+            results_ptr += vlen;
+        }
     }
 
     void ShardServer::Run()
@@ -611,6 +853,8 @@ namespace mako
             }
 
             if (queue->should_stop()) {
+                // Stop Luigi scheduler on shutdown
+                shardReceiver->StopLuigiScheduler();
                 break;
             }
         }

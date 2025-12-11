@@ -723,7 +723,7 @@ void RrrRpcBackend::RequestHandler(uint8_t req_type, rusty::Box<rrr::Request> re
         get_int_response_t resp;
         resp.result = sync_util::sync_logger::retrieveShardW();
         resp.req_nr = basic_req.req_nr;
-        resp.status = ErrorCode::SUCCESS;
+        resp.status = MakoErrorCode::OK;
         resp.shard_index = TThread::get_shard_index();
 
         // Send response
@@ -747,7 +747,7 @@ void RrrRpcBackend::RequestHandler(uint8_t req_type, rusty::Box<rrr::Request> re
         get_int_response_t resp;
         resp.result = 1;
         resp.req_nr = warmup_req.req_nr;
-        resp.status = ErrorCode::SUCCESS;
+        resp.status = MakoErrorCode::OK;
         resp.shard_index = TThread::get_shard_index();
 
         const_cast<rrr::ServerConnection&>(*sconn).begin_reply(*req);
@@ -781,7 +781,7 @@ void RrrRpcBackend::RequestHandler(uint8_t req_type, rusty::Box<rrr::Request> re
         get_int_response_t resp;
         resp.result = 0;
         resp.req_nr = ctrl_req.req_nr;
-        resp.status = ErrorCode::SUCCESS;
+        resp.status = MakoErrorCode::OK;
         resp.shard_index = TThread::get_shard_index();
 
         const_cast<rrr::ServerConnection&>(*sconn).begin_reply(*req);

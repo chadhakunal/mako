@@ -1081,7 +1081,7 @@ public:
         if (i == myShardIndex) continue;  // Skip self
         int retries = 0;
         const int maxRetries = 30;  // 30 seconds max wait
-        while (TThread::sclient->checkRemoteShardReady(i) != mako::ErrorCode::SUCCESS) {
+        while (TThread::sclient->checkRemoteShardReady(i) != mako::MakoErrorCode::OK) {
           retries++;
           if (retries >= maxRetries) {
             Warning("Shard %d not ready after %d retries, proceeding anyway", i, maxRetries);

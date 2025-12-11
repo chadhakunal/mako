@@ -14,6 +14,21 @@
 #include "benchmarks/abstract_ordered_index.h"
 #include "lib/helper_queue.h"
 
+// Forward declarations for Luigi (avoid heavy deptran includes in header)
+namespace janus {
+class SchedulerLuigi;
+class LuigiRpcSetup;
+}
+
+// Forward declarations for rrr RPC
+namespace rrr {
+class Server;
+class PollThread;
+}
+namespace rusty {
+template<typename T> class Arc;
+}
+
 void register_sync_util_ss(std::function<int()>);
 
 namespace mako
@@ -55,6 +70,9 @@ namespace mako
         void HandleGetMicroMegaRequest(char *reqBuf, char *respBuf, size_t &respLen);
         void HandleBatchLockMicroMegaRequest(char *reqBuf, char *respBuf, size_t &respLen);
 
+        // Luigi (Tiga-style) handler
+        void HandleLuigiDispatch(char *reqBuf, char *respBuf, size_t &respLen);
+
     protected:
         inline void *txn_buf() { return (void *) txn_obj_buf.data(); }
 
@@ -80,6 +98,27 @@ namespace mako
         string obj_v;
 
         int current_term ;
+
+        // Luigi (Tiga-style) scheduler for timestamp-ordered execution
+        janus::SchedulerLuigi* luigi_scheduler_ = nullptr;
+        janus::LuigiRpcSetup* luigi_rpc_setup_ = nullptr;
+        uint32_t partition_id_ = 0;
+
+    public:
+        // Initialize and start Luigi scheduler
+        void InitLuigiScheduler(uint32_t partition_id);
+        
+        // Set up Luigi RPC (call after InitLuigiScheduler)
+        // rpc_server: the rrr::Server to register service with
+        // poll_thread: for async I/O
+        // shard_addresses: map of shard_id -> "host:port" for other leaders
+        void SetupLuigiRpc(
+            rrr::Server* rpc_server,
+            rusty::Arc<rrr::PollThread> poll_thread,
+            const std::map<uint32_t, std::string>& shard_addresses);
+        
+        void StopLuigiScheduler();
+        janus::SchedulerLuigi* GetLuigiScheduler() { return luigi_scheduler_; }
     };
 
     class ShardServer
