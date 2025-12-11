@@ -1,11 +1,12 @@
 #include "luigi_executor.h"
 
 #include <chrono>
+#include <algorithm>
 
 // Mako includes
 #include "benchmarks/abstract_ordered_index.h"  // For shard_get/shard_put
-#include "deptran/s_main.h"  // For add_log_to_nc (replication)
 #include "deptran/__dep__.h"  // For logging macros
+// #include "deptran/s_main.h"  // For add_log_to_nc (replication) - TODO
 
 namespace janus {
 
@@ -22,8 +23,6 @@ LuigiExecutor::~LuigiExecutor() {}
 //=============================================================================
 
 void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
-  entry->exec_status_.store(LUIGI_EXEC_DIRECT);
-  
   int status = 0;  // SUCCESS
   uint64_t commit_ts = entry->proposed_ts_;
   
@@ -33,60 +32,67 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
   bool is_multi_shard = IsMultiShard(entry);
   
   //-------------------------------------------------------------------------
-  // Step 2: Leader agreement (if multi-shard)
+  // Step 2: For single-shard txns, execute directly
+  //         For multi-shard txns, do agreement FIRST (Option D - no speculative exec)
   //
-  // For multi-shard txns, we need the 3-case agreement protocol:
-  // Case 1: All timestamps matched -> release immediately
-  // Case 2: This leader used agreed_ts, others didn't -> WAIT
-  // Case 3: This leader used smaller ts -> ROLLBACK + reposition
+  // Agreement Protocol (3-case):
+  // - Round 1: All leaders propose their hold-release timestamps
+  // - agreed_ts = max(all proposals)
+  // - Case 1: All timestamps matched -> release immediately
+  // - Case 2: This leader used agreed_ts, others proposed smaller -> WAIT for them
+  // - Case 3: This leader used smaller ts -> reposition to agreed_ts and retry
+  //
+  // Key: We do NOT execute until agreement is complete. This avoids rollbacks.
   //-------------------------------------------------------------------------
   if (is_multi_shard) {
     AgreementResult result = PerformLeaderAgreement(entry);
     
     switch (result) {
-      case AgreementResult::SUCCESS:
-        // Case 1: All matched, or Case 2 confirmed - proceed with execution
+      case AgreementResult::AGREEMENT_SUCCESS:
+        // Case 1: All timestamps matched, or Case 2 received all confirmations
+        // Safe to proceed with execution
         commit_ts = entry->agreed_ts_;
+        entry->exec_status_.store(LUIGI_EXEC_DIRECT);
         break;
         
       case AgreementResult::WAIT_ROUND2:
-        // Case 2: We used agreed_ts but others haven't - don't release yet
-        // The scheduler will handle re-queuing and waiting
-        Log_info("Luigi Execute: txn %lu waiting for round 2 confirmation", entry->tid_);
+        // Case 2: We used agreed_ts but others proposed smaller timestamps
+        // Must wait for them to confirm they've repositioned before we can execute
+        // This prevents timestamp inversion (we can't execute before they reposition)
+        Log_info("Luigi Execute: txn %lu in CONFIRMING state - waiting for round 2", entry->tid_);
         entry->agree_status_.store(LUIGI_AGREE_CONFIRMING);
-        entry->exec_status_.store(LUIGI_EXEC_INIT);  // Reset for re-processing
-        // Don't execute yet - return without callback
+        entry->exec_status_.store(LUIGI_EXEC_INIT);  // Not started yet
+        // Return to scheduler - will be re-triggered when confirmations arrive
         return;
         
-      case AgreementResult::NEEDS_ROLLBACK:
-        // Case 3: We used smaller ts - need to rollback and reposition
-        Log_info("Luigi Execute: txn %lu needs rollback (agreed_ts=%lu > proposed_ts=%lu)",
-                 entry->tid_, entry->agreed_ts_, entry->proposed_ts_);
+      case AgreementResult::NEEDS_REPOSITION:
+        // Case 3: We proposed smaller ts than agreed_ts
+        // Must reposition in the priority queue and retry when we reach head again
+        // No rollback needed since we haven't executed yet (Option D)
+        Log_info("Luigi Execute: txn %lu needs reposition (proposed=%lu < agreed=%lu)",
+                 entry->tid_, entry->proposed_ts_, entry->agreed_ts_);
         entry->agree_status_.store(LUIGI_AGREE_FLUSHING);
-        entry->exec_status_.store(LUIGI_EXEC_ROLLBACK);
+        entry->exec_status_.store(LUIGI_EXEC_INIT);  // Not started
         
-        // If we already executed speculatively, rollback
-        if (entry->exec_status_.load() == LUIGI_EXEC_SPEC) {
-          status = RollbackSpeculativeExecution(entry);
-          if (status != 0) {
-            Log_error("Luigi Execute: Rollback failed for txn %lu", entry->tid_);
-            goto done;
-          }
-        }
-        
-        // Update proposed timestamp to agreed timestamp and requeue
+        // Update proposed timestamp to agreed timestamp
         entry->proposed_ts_ = entry->agreed_ts_;
-        entry->exec_status_.store(LUIGI_EXEC_REPOSITIONED);  // Mark as repositioned
         entry->requeue_count_++;
         // Scheduler will reposition in priority queue based on new timestamp
-        // Don't execute yet - return without callback
+        // No callback - scheduler will retry when this txn reaches head again
         return;
         
-      case AgreementResult::FAILED:
+      case AgreementResult::AGREEMENT_FAILED:
         Log_error("Luigi Execute: Leader agreement failed for txn %lu", entry->tid_);
         status = -1;
         goto done;
     }
+  } else {
+    // Single-shard: no agreement needed, execute directly
+    entry->agreed_ts_ = entry->proposed_ts_;
+    entry->ts_agreed_.store(true);
+    entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
+    entry->exec_status_.store(LUIGI_EXEC_DIRECT);
+    commit_ts = entry->proposed_ts_;
   }
   
   //-------------------------------------------------------------------------
@@ -138,87 +144,181 @@ bool LuigiExecutor::IsMultiShard(const std::shared_ptr<LuigiLogEntry>& entry) {
 LuigiExecutor::AgreementResult LuigiExecutor::PerformLeaderAgreement(
     std::shared_ptr<LuigiLogEntry> entry) {
   //===========================================================================
-  // PLACEHOLDER: Leader Agreement State Machine
+  // Leader Agreement State Machine (Tiga-style, Agreement-Before-Execution)
   //
-  // This implements the 3-case agreement protocol from the Tiga paper:
+  // Phase 1: Exchange timestamp proposals
+  // Phase 2: Confirm repositions (if needed)
   //
-  // ROUND 1: Each leader proposes proposed_ts_ (based on hold-and-release)
-  // 
-  // After receiving all proposals, compute agreed_ts_ = max(all proposals)
-  //
-  // ROUND 1 OUTCOMES (per-leader):
-  //   Case 1: ALL timestamps matched (my_proposed == agreed)
-  //           -> Release immediately, 0.5 WRTT latency
-  //   
-  //   Case 2: This leader already used agreed_ts (my_proposed == agreed)
-  //           but OTHER leaders proposed smaller timestamps
-  //           -> WAIT for round 2 confirmation from those leaders
-  //           -> Cannot release until they confirm they've repositioned
-  //           -> Prevents timestamp inversion!
-  //   
-  //   Case 3: This leader used SMALLER ts (my_proposed < agreed)
-  //           -> ROLLBACK speculative execution
-  //           -> Update proposed_ts_ = agreed_ts_
-  //           -> Reposition in holdBuffer at new timestamp
-  //           -> Re-execute when reaching head again
-  //
-  // ROUND 2: Leaders who did Case 3 send confirmation
-  //          Leaders in Case 2 can then release
-  //
+  // 3-Case outcomes after Phase 1:
+  //   Case 1: All proposals == agreed_ts -> SUCCESS (0.5 WRTT)
+  //   Case 2: My proposal == agreed_ts, others smaller -> WAIT_ROUND2
+  //   Case 3: My proposal < agreed_ts -> NEEDS_REPOSITION
   //===========================================================================
   
   entry->prev_agree_status_.store(entry->agree_status_.load());
   
+  //-------------------------------------------------------------------------
+  // Single-shard fast path
+  //-------------------------------------------------------------------------
   if (entry->remote_shards_.empty()) {
-    // Single-shard: no agreement needed, use proposed timestamp
     entry->agreed_ts_ = entry->proposed_ts_;
     entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
     entry->ts_agreed_.store(true);
-    return AgreementResult::SUCCESS;
+    return AgreementResult::AGREEMENT_SUCCESS;
   }
   
-  // Multi-shard case
-  Log_info("Luigi Agreement: Multi-shard txn %lu, proposed_ts=%lu, %zu remote shards",
+  //-------------------------------------------------------------------------
+  // Check if we're in a re-entry (coming back from FLUSHING)
+  //-------------------------------------------------------------------------
+  if (entry->agree_status_.load() == LUIGI_AGREE_FLUSHING) {
+    // We were repositioned and are now re-entering with updated proposed_ts_
+    // We need to do Phase 2: send confirmation to other leaders
+    Log_info("Luigi Agreement: txn %lu re-entering after reposition (Phase 2)",
+             entry->tid_);
+    return PerformAgreementPhase2(entry);
+  }
+  
+  //-------------------------------------------------------------------------
+  // Phase 1: Exchange timestamp proposals (AGREE_INIT -> determine case)
+  //-------------------------------------------------------------------------
+  Log_info("Luigi Agreement: txn %lu Phase 1, proposed_ts=%lu, %zu remote shards",
            entry->tid_, entry->proposed_ts_, entry->remote_shards_.size());
   
+  // Collect proposals from all involved shards (including ourselves)
+  std::map<uint32_t, uint64_t> shard_proposals;
+  shard_proposals[partition_id_] = entry->proposed_ts_;  // Our proposal
+  
   //===========================================================================
-  // TODO: Implement actual leader agreement RPC
+  // TODO: RPC to collect proposals from remote shards
   //
-  // ROUND 1 Implementation:
-  //   for each remote_shard in remote_shards_:
-  //       response = RPC_ProposeTimestamp(remote_shard, tid_, proposed_ts_)
-  //       remote_proposals[remote_shard] = response.proposed_ts
-  //   
-  //   agreed_ts_ = max(proposed_ts_, max(remote_proposals))
-  //   
-  //   // Determine which case we're in
-  //   if (all proposals == agreed_ts_):
-  //       return AgreementResult::SUCCESS  // Case 1
-  //   elif (proposed_ts_ == agreed_ts_):
-  //       return AgreementResult::WAIT_ROUND2  // Case 2
-  //   else:
-  //       return AgreementResult::NEEDS_ROLLBACK  // Case 3
+  // for (uint32_t remote_shard : entry->remote_shards_) {
+  //     // Build request: tid_, my proposed_ts, keys involved
+  //     LuigiDeadlineRequest req;
+  //     req.tid = entry->tid_;
+  //     req.proposed_ts = entry->proposed_ts_;
+  //     req.my_shard_id = partition_id_;
+  //     req.keys = entry->shard_to_keys_[remote_shard];
   //
-  // ROUND 2 Implementation (for Case 3 leaders):
-  //   RPC_ConfirmReposition(remote_shards, tid_, agreed_ts_)
+  //     // Send RPC and get response
+  //     LuigiDeadlineResponse resp = RPC_ProposeDeadline(remote_shard, req);
+  //     shard_proposals[remote_shard] = resp.proposed_ts;
+  // }
   //
-  // For leaders in Case 2 waiting:
-  //   Wait until ReceiveRepositionConfirm(tid_) from all Case 3 leaders
-  //   Then return AgreementResult::SUCCESS
+  // PLACEHOLDER: For now, simulate that remote shards propose the same timestamp
+  //===========================================================================
+  for (uint32_t remote_shard : entry->remote_shards_) {
+    // PLACEHOLDER: Assume all remote shards agree with our timestamp
+    // In real implementation, this comes from RPC response
+    shard_proposals[remote_shard] = entry->proposed_ts_;
+  }
+  
+  //-------------------------------------------------------------------------
+  // Compute agreed timestamp = max(all proposals)
+  //-------------------------------------------------------------------------
+  uint64_t agreed_ts = entry->proposed_ts_;
+  for (const auto& [shard_id, ts] : shard_proposals) {
+    if (ts > agreed_ts) {
+      agreed_ts = ts;
+    }
+  }
+  entry->agreed_ts_ = agreed_ts;
+  
+  Log_debug("Luigi Agreement: txn %lu agreed_ts=%lu (from %zu shards)",
+            entry->tid_, agreed_ts, shard_proposals.size());
+  
+  //-------------------------------------------------------------------------
+  // Determine which case we're in
+  //-------------------------------------------------------------------------
+  bool all_matched = true;
+  for (const auto& [shard_id, ts] : shard_proposals) {
+    if (ts != agreed_ts) {
+      all_matched = false;
+      break;
+    }
+  }
+  
+  if (all_matched) {
+    //-----------------------------------------------------------------------
+    // Case 1: All proposals matched -> release immediately
+    //-----------------------------------------------------------------------
+    Log_info("Luigi Agreement: txn %lu CASE 1 - all matched at ts=%lu",
+             entry->tid_, agreed_ts);
+    entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
+    entry->ts_agreed_.store(true);
+    return AgreementResult::AGREEMENT_SUCCESS;
+  }
+  
+  if (entry->proposed_ts_ == agreed_ts) {
+    //-----------------------------------------------------------------------
+    // Case 2: We have the max timestamp, but others proposed smaller
+    // Must wait for them to confirm they've repositioned (Phase 2)
+    //
+    // CRITICAL: We cannot execute yet! If we execute before they reposition,
+    // they might execute at their smaller timestamp, violating ordering.
+    //-----------------------------------------------------------------------
+    Log_info("Luigi Agreement: txn %lu CASE 2 - waiting for round 2 (our ts=%lu, agreed=%lu)",
+             entry->tid_, entry->proposed_ts_, agreed_ts);
+    entry->agree_status_.store(LUIGI_AGREE_CONFIRMING);
+    
+    // Track which shards we're waiting for
+    // TODO: Store pending confirmations
+    // entry->pending_confirmations_.clear();
+    // for (const auto& [shard_id, ts] : shard_proposals) {
+    //     if (ts < agreed_ts) {
+    //         entry->pending_confirmations_.insert(shard_id);
+    //     }
+    // }
+    
+    return AgreementResult::WAIT_ROUND2;
+  }
+  
+  //-------------------------------------------------------------------------
+  // Case 3: We proposed smaller timestamp -> need to reposition
+  //-------------------------------------------------------------------------
+  Log_info("Luigi Agreement: txn %lu CASE 3 - reposition (proposed=%lu < agreed=%lu)",
+           entry->tid_, entry->proposed_ts_, agreed_ts);
+  entry->agree_status_.store(LUIGI_AGREE_FLUSHING);
+  entry->ts_agreed_.store(true);  // We know the agreed value
+  
+  return AgreementResult::NEEDS_REPOSITION;
+}
+
+LuigiExecutor::AgreementResult LuigiExecutor::PerformAgreementPhase2(
+    std::shared_ptr<LuigiLogEntry> entry) {
+  //===========================================================================
+  // Phase 2: Confirmation after reposition
   //
+  // We were in Case 3 (our proposed_ts < agreed_ts), have repositioned,
+  // and now re-entering. We need to:
+  // 1. Send confirmation to leaders in Case 2 (who are waiting for us)
+  // 2. If all confirmations received, we can proceed to execute
   //===========================================================================
   
-  // PLACEHOLDER: For now, simulate Case 1 (all matched) for simplicity
-  // In real implementation, this would involve RPC exchanges
+  Log_info("Luigi Agreement Phase 2: txn %lu sending confirmations, new_ts=%lu",
+           entry->tid_, entry->proposed_ts_);
   
-  entry->agreed_ts_ = entry->proposed_ts_;
+  //===========================================================================
+  // TODO: RPC to confirm reposition to other shards
+  //
+  // for (uint32_t remote_shard : entry->remote_shards_) {
+  //     LuigiConfirmRequest req;
+  //     req.tid = entry->tid_;
+  //     req.new_ts = entry->proposed_ts_;  // Should equal agreed_ts_
+  //     req.my_shard_id = partition_id_;
+  //     
+  //     RPC_ConfirmReposition(remote_shard, req);
+  // }
+  //
+  // PLACEHOLDER: Assume confirmations sent and received successfully
+  //===========================================================================
+  
   entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
   entry->ts_agreed_.store(true);
   
-  Log_info("Luigi Agreement: txn %lu agreed_ts=%lu (PLACEHOLDER - actual agreement TBD)",
-           entry->tid_, entry->agreed_ts_);
+  Log_info("Luigi Agreement Phase 2: txn %lu complete, ready to execute at ts=%lu",
+           entry->tid_, entry->proposed_ts_);
   
-  return AgreementResult::SUCCESS;
+  return AgreementResult::AGREEMENT_SUCCESS;
 }
 
 //=============================================================================
@@ -389,81 +489,25 @@ int LuigiExecutor::TriggerReplication(std::shared_ptr<LuigiLogEntry> entry) {
 }
 
 //=============================================================================
-// Rollback Support for Case 3 Agreement
+// Note on Rollback (Option D - Agreement Before Execution)
+//
+// With Option D, we do NOT execute speculatively for multi-shard txns.
+// Instead, we:
+//   1. Wait for leader agreement to complete
+//   2. Only then execute the transaction
+//
+// This means we never need to rollback executed operations.
+// The "reposition" case (Case 3) simply moves the txn in the priority queue
+// without having executed anything yet.
+//
+// Trade-off: We sacrifice some potential latency hiding (speculative exec)
+// in exchange for:
+//   - No rollback complexity
+//   - Simpler correctness reasoning
+//   - No wasted work on failed speculation
+//
+// If we later want speculative execution (Option A/B/C from the design),
+// we would add a RollbackSpeculativeExecution() function here.
 //=============================================================================
-
-int LuigiExecutor::RollbackSpeculativeExecution(std::shared_ptr<LuigiLogEntry> entry) {
-  //===========================================================================
-  // Rollback Speculative Writes
-  //
-  // When a multi-shard txn goes through agreement and we're in Case 3
-  // (our proposed_ts_ was smaller than agreed_ts_), we need to:
-  //
-  // 1. Undo any writes we did speculatively
-  // 2. Clear the executed state
-  // 3. The txn will be repositioned in the queue and re-executed later
-  //
-  // NOTE: In Tiga, speculative execution writes to speculativeVersion_[key].
-  //       Rollback sets speculativeVersion_[key] = {UINT64_MAX, UINT32_MAX}
-  //       to invalidate the speculative write.
-  //
-  // In Luigi/Mako with direct shard_put:
-  // - We can either restore old values (if tracked) OR
-  // - Use Mako's STO abort mechanism OR  
-  // - NOT do speculative execution until agreement is done (simplest)
-  //
-  // IMPORTANT: Reads don't need rollback - they're idempotent.
-  //            Only writes (state changes) need to be undone.
-  //===========================================================================
-  
-  Log_info("Luigi Rollback: txn %lu, requeue_count=%u",
-           entry->tid_, entry->requeue_count_);
-  
-  // If we haven't actually executed writes yet (waiting for agreement),
-  // there's nothing to rollback
-  if (entry->exec_status_.load() != LUIGI_EXEC_SPEC) {
-    Log_debug("Luigi Rollback: txn %lu not in EXEC_SPEC state, nothing to rollback",
-              entry->tid_);
-    return 0;
-  }
-  
-  //===========================================================================
-  // TODO: Implement actual rollback
-  //
-  // Option A: Track old values during speculative write, restore them here
-  //   for each (table_id, key, old_value) in speculative_writes:
-  //       if old_value.empty():
-  //           table->shard_delete(key)
-  //       else:
-  //           table->shard_put(key, old_value)
-  //
-  // Option B: Use Tiga-style speculative versions
-  //   speculativeVersion_[key] = {UINT64_MAX, UINT32_MAX}  // Invalidate
-  //
-  // Option C: Use Mako's abort mechanism (if integrated with STO)
-  //   Sto::silent_abort()
-  //
-  // Option D: Don't execute speculatively for multi-shard txns
-  //   Wait for agreement first, then execute (simplest, no rollback needed)
-  //
-  // For now: placeholder, clear execution state
-  //===========================================================================
-  
-  // Clear execution state
-  entry->read_results_.clear();
-  
-  // Reset op execution flags
-  for (auto& op : entry->ops_) {
-    op.executed = false;
-  }
-  
-  // Update execution status
-  entry->exec_status_.store(LUIGI_EXEC_ROLLBACK);
-  
-  Log_info("Luigi Rollback: txn %lu rollback complete (placeholder - actual undo TBD)",
-           entry->tid_);
-  
-  return 0;
-}
 
 } // namespace janus

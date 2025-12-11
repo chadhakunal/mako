@@ -112,7 +112,7 @@ namespace mako
         if (waiting != nullptr) {
             Promise *w = waiting;
             waiting = nullptr;
-            w->Reply(ErrorCode::TIMEOUT);
+            w->Reply(MakoErrorCode::TIMEOUT);
         }
     }
 
@@ -132,16 +132,16 @@ namespace mako
     }
 
     void ShardClient::SendToAllGiveUpTimeout() {
-        status_received.push_back((int) ErrorCode::TIMEOUT);
+        status_received.push_back((int) MakoErrorCode::TIMEOUT);
     }
 
     bool ShardClient::is_all_response_ok() {
         bool ok = true;
-        for (auto code: status_received) ok &= (code == ErrorCode::SUCCESS);
+        for (auto code: status_received) ok &= (code == MakoErrorCode::OK);
         status_received.clear();
         for (int i=0;i<(int)int_received.size(); i++)
             int_received[i] = 0;
-        return ok ? ErrorCode::SUCCESS : ErrorCode::ERROR;
+        return ok ? MakoErrorCode::OK : MakoErrorCode::ERROR;
     }
 
     void ShardClient::calculate_num_response_waiting(int shards_to_send_bits) {
@@ -240,7 +240,7 @@ namespace mako
         vector<string> &value_batch
     ) {
         if (remote_table_id_batch.empty())
-            return ErrorCode::SUCCESS;
+            return MakoErrorCode::OK;
 
         map<int, BatchLockRequestWrapper> request_batch_per_shard;
         uint16_t server_id = shardIndex * config.warehouses + par_id;
@@ -304,7 +304,7 @@ namespace mako
 
     int ShardClient::remoteValidate(uint32_t &watermark) {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -329,7 +329,7 @@ namespace mako
         // Single timestamp encoding - no vector needed
         char *cc = encode_single_timestamp(timestamp);
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -430,7 +430,7 @@ namespace mako
 
     int ShardClient::remoteUnLock() {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -445,7 +445,7 @@ namespace mako
 
     int ShardClient::remoteGetTimestamp(uint32_t &timestamp) {
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -470,7 +470,7 @@ namespace mako
         // Single timestamp encoding - no vector needed
         char *cc = encode_single_timestamp(timestamp);
         int shards_to_send_bits = TThread::writeset_shard_bits;
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 
@@ -490,7 +490,7 @@ namespace mako
         if (TThread::trans_nosend_abort > 0){
             shards_to_send_bits = shards_to_send_bits ^ TThread::trans_nosend_abort;
         }
-        if (!shards_to_send_bits) return ErrorCode::SUCCESS;
+        if (!shards_to_send_bits) return MakoErrorCode::OK;
         calculate_num_response_waiting(shards_to_send_bits);
         uint16_t server_id = shardIndex * config.warehouses + par_id;
 

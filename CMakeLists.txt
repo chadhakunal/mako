@@ -518,6 +518,9 @@ set(MAKO_SRCFILES
   "${CMAKE_CURRENT_SOURCE_DIR}/src/mako/lib/shardClient.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/mako/lib/server.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/mako/benchmarks/abstract_db.cc"
+  # Luigi files (Tiga-style timestamp ordering for leaders)
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi_scheduler.cc"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi_executor.cc"
 )
 
 # Benchmark flags
@@ -707,6 +710,7 @@ target_include_directories(mako PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/third-party/lz4"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/rrr"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/deptran"
     "${HOME}"
     "${CMAKE_CURRENT_SOURCE_DIR}/third-party/rusty-cpp/include"
 )
@@ -779,6 +783,7 @@ function(add_apps exec_name exec_path)
       ${CMAKE_CURRENT_SOURCE_DIR}/third-party/erpc/src
       ${CMAKE_CURRENT_SOURCE_DIR}/third-party/erpc/third_party/asio/include
       ${CMAKE_CURRENT_SOURCE_DIR}/src
+      ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran
       ${CMAKE_CURRENT_SOURCE_DIR}
   )
 
