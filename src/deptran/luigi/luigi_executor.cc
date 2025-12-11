@@ -149,14 +149,10 @@ done:
 //=============================================================================
 
 bool LuigiExecutor::IsMultiShard(const std::shared_ptr<LuigiLogEntry>& entry) {
-  // Check if the transaction has remote_shards set
-  // This would be populated by the coordinator when it knows the txn
-  // touches multiple shards
-  
-  // For now, we rely on the entry having this information from the coordinator
-  // The coordinator knows which partitions a txn touches based on the keys
-  
-  // Simple check: if remote_shards_ is non-empty, it's multi-shard
+  // Prefer explicit involved_shards_ when present; fallback to remote_shards_
+  if (!entry->involved_shards_.empty()) {
+    return entry->involved_shards_.size() > 1;
+  }
   return !entry->remote_shards_.empty();
 }
 

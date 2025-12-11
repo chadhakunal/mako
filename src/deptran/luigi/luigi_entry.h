@@ -149,10 +149,25 @@ struct LuigiLogEntry {
         reply_status_(0) {}
 
   //--- Helper: Is this a multi-shard transaction? ---
-  bool IsMultiShard() const { return shard_to_keys_.size() > 1; }
+  bool IsMultiShard() const {
+    if (!involved_shards_.empty()) {
+      return involved_shards_.size() > 1;
+    }
+    if (!remote_shards_.empty()) {
+      return true;
+    }
+    return shard_to_keys_.size() > 1;
+  }
 
   //--- Helper: Get number of shards ---
-  uint32_t NumShards() const { return shard_to_keys_.size(); }
+  uint32_t NumShards() const {
+    if (!involved_shards_.empty()) {
+      return involved_shards_.size();
+    }
+    auto n = shard_to_keys_.size();
+    if (n > 0) return n;
+    return remote_shards_.empty() ? 1 : static_cast<uint32_t>(1 + remote_shards_.size());
+  }
 
   //--- Helper: Unique ID string ---
   std::string ID() const {
