@@ -41,7 +41,7 @@ namespace mako
         // Returns commit timestamps and read results per shard
         int remoteLuigiDispatch(
             uint64_t txn_id,
-            uint64_t expected_time,
+            uint64_t expected_time_us,
             std::vector<int>& table_ids,
             std::vector<uint8_t>& op_types,      // LUIGI_OP_READ or LUIGI_OP_WRITE
             std::vector<std::string>& keys,

@@ -724,11 +724,25 @@ namespace mako
         
         // Dispatch to Luigi scheduler with completion callback
         // Use expected_time from request as the execution deadline; map to Luigi scheduler params
+        // Compute involved shards from table_id (global) -> shard idx
+        std::vector<uint32_t> involved_shards;
+        {
+            uint64_t shard_bits = 0;
+            for (const auto& op : ops) {
+                uint32_t shard_idx = (op.table_id - 1) / mako::NUM_TABLES_PER_SHARD;
+                if (!(shard_bits & (1ULL << shard_idx))) {
+                    shard_bits |= (1ULL << shard_idx);
+                    involved_shards.push_back(shard_idx);
+                }
+            }
+        }
+
         luigi_scheduler_->LuigiDispatchFromRequest(
             req->txn_id,
-            req->expected_time,
+            req->expected_time_us,
             0 /*bound*/,  // deadline = expected_time
             ops,
+            involved_shards,
             [&](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
                 std::lock_guard<std::mutex> lock(completion_mutex);
                 result_status = status;

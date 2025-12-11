@@ -59,9 +59,10 @@ class SchedulerLuigi : public SchedulerClassic {
   // Parses the request, creates a LuigiLogEntry, and enqueues it.
   void LuigiDispatchFromRequest(
       uint64_t txn_id,
-      uint64_t send_time,
+      uint64_t expected_time_us,  // absolute execution deadline in microseconds
       uint32_t bound,
       const std::vector<LuigiOp>& ops,
+      const std::vector<uint32_t>& involved_shards,
       std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb);
 
   // Original entry point (kept for compatibility with deptran-style calls)

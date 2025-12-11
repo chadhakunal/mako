@@ -708,10 +708,10 @@ bool Transaction::try_commit_luigi() {
         }
     }
 
-    // Get expected timestamp using LuigiOWD service
-    // expected_time = current_time + max_owd(involved_shards) + headroom
+    // Get expected timestamp using LuigiOWD service (ms) and convert to microseconds
+    // expected_time_us = (current_time + max_owd + headroom) * 1000
     uint64_t txn_id = (uint64_t(threadid_) << 48) | TThread::increment_id;
-    uint64_t expected_time = mako::luigi::LuigiOWD::getInstance().getExpectedTimestamp(involved_shards);
+    uint64_t expected_time_us = mako::luigi::LuigiOWD::getInstance().getExpectedTimestamp(involved_shards) * 1000;
 
     // Output maps for results
     std::map<int, uint64_t> execute_timestamps;
@@ -720,7 +720,7 @@ bool Transaction::try_commit_luigi() {
     // Send to all involved shards and wait for responses
     int status = TThread::sclient->remoteLuigiDispatch(
         txn_id,
-        expected_time,
+        expected_time_us,
         table_ids,
         op_types,
         keys,

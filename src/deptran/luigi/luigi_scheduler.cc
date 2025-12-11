@@ -62,17 +62,22 @@ uint64_t SchedulerLuigi::GetMicrosecondTimestamp() {
 
 void SchedulerLuigi::LuigiDispatchFromRequest(
     uint64_t txn_id,
-    uint64_t send_time,
+    uint64_t expected_time_us,
     uint32_t bound,
     const std::vector<LuigiOp>& ops,
+    const std::vector<uint32_t>& involved_shards,
     std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb) {
   
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
-  entry->send_time_ = send_time;
+  entry->send_time_ = expected_time_us;
   entry->bound_ = bound;
-  entry->proposed_ts_ = send_time + bound;
+  entry->proposed_ts_ = expected_time_us;  // already absolute deadline
   entry->ops_ = ops;
   entry->reply_cb_ = reply_cb;
+  entry->involved_shards_.insert(involved_shards.begin(), involved_shards.end());
+  for (auto s : involved_shards) {
+    if (s != partition_id_) entry->remote_shards_.push_back(s);
+  }
 
   // Extract keys for conflict detection
   // We use a simple hash of (table_id, key) as the conflict key

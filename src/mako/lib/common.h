@@ -274,7 +274,7 @@ namespace mako
         uint16_t target_server_id;     // Target shard
         uint32_t req_nr;               // Request number (for matching response)
         uint64_t txn_id;               // Unique transaction ID
-        uint64_t expected_time;        // Timestamp at which transaction should execute
+        uint64_t expected_time_us;     // Execution deadline in microseconds
         uint16_t num_ops;              // Number of operations in this dispatch
         // Each op: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
         // op_type: 0=read, 1=write

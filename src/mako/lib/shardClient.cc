@@ -590,7 +590,7 @@ namespace mako
 
     int ShardClient::remoteLuigiDispatch(
         uint64_t txn_id,
-        uint64_t expected_time,
+        uint64_t expected_time_us,
         std::vector<int>& table_ids,
         std::vector<uint8_t>& op_types,
         std::vector<std::string>& keys,
@@ -623,7 +623,7 @@ namespace mako
             // Create builder for this shard if not exists
             if (requests_per_shard.find(dst_shard_idx) == requests_per_shard.end()) {
                 auto* builder = new LuigiDispatchRequestBuilder();
-                builder->set_header(server_id, txn_id, expected_time);
+                builder->set_header(server_id, txn_id, expected_time_us);
                 requests_per_shard[dst_shard_idx] = builder;
                 shard_order.push_back(dst_shard_idx);
             }
