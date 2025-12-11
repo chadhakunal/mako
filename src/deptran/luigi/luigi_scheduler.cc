@@ -11,7 +11,8 @@ namespace janus {
 //=============================================================================
 
 SchedulerLuigi::SchedulerLuigi() : SchedulerClassic() {
-  // Nothing special needed here; vectors/maps init lazily
+  // Set executor's scheduler reference so it can call back for RPC coordination
+  executor_.SetScheduler(this);
 }
 
 SchedulerLuigi::~SchedulerLuigi() { Stop(); }
@@ -323,6 +324,274 @@ void SchedulerLuigi::ExecTd() {
     if (cnt == 0) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
+  }
+}
+
+//=============================================================================
+// Agreement Handlers - Tiga-style bidirectional broadcast
+//
+// In Tiga's model:
+// 1. Each leader involved in a multi-shard txn broadcasts its proposal to all
+//    other involved shards (fire-and-forget, no waiting for response)
+// 2. Each leader collects proposals as they arrive (via RPC handlers)
+// 3. When all proposals received (itemCnt_ == expectedCnt_), compute:
+//    - agreed_ts = max(all proposals)
+//    - Case 1: all match -> AGREE_COMPLETE
+//    - Case 2: my_ts == agreed_ts but others differ -> AGREE_CONFIRMING
+//    - Case 3: my_ts < agreed_ts -> AGREE_FLUSHING (reposition)
+//=============================================================================
+
+void SchedulerLuigi::UpdateDeadlineRecord(
+    uint64_t tid, uint32_t src_shard, uint64_t proposed_ts,
+    uint32_t phase, std::shared_ptr<LuigiLogEntry> entry) {
+  //===========================================================================
+  // Core agreement logic - called for both local and remote proposals.
+  //
+  // When all proposals are received, this determines the outcome.
+  //===========================================================================
+  
+  std::lock_guard<std::mutex> lock(deadline_queue_mutex_);
+  
+  DeadlineQItem& dqi = deadline_queue_[tid];
+  
+  // If entry provided (our local txn), initialize expected count
+  if (entry != nullptr && dqi.entry_ == nullptr) {
+    dqi.entry_ = entry;
+    dqi.expected_count_ = entry->remote_shards_.size() + 1;  // remotes + ourselves
+    Log_info("Luigi UpdateDeadlineRecord: tid=%lu initialized, expecting %u proposals",
+             tid, dqi.expected_count_);
+  }
+  
+  // Record this proposal (if not already received from this shard)
+  if (src_shard < DeadlineQItem::MAX_SHARDS && !dqi.received_[src_shard]) {
+    dqi.deadlines_[src_shard] = proposed_ts;
+    dqi.phases_[src_shard] = phase;
+    dqi.received_[src_shard] = true;
+    dqi.item_count_++;
+    
+    Log_info("Luigi UpdateDeadlineRecord: tid=%lu from shard %u ts=%lu phase=%u, "
+             "now have %u/%u proposals",
+             tid, src_shard, proposed_ts, phase, dqi.item_count_, dqi.expected_count_);
+  } else if (src_shard >= DeadlineQItem::MAX_SHARDS) {
+    Log_warn("Luigi UpdateDeadlineRecord: shard_id %u exceeds MAX_SHARDS", src_shard);
+    return;
+  }
+  
+  // Check if we have all proposals AND we have the entry
+  if (dqi.entry_ != nullptr && dqi.expected_count_ > 0 && 
+      dqi.item_count_ == dqi.expected_count_) {
+    
+    // Compute agreed timestamp as max of all proposals
+    uint64_t agreed_ts = 0;
+    bool all_match = true;
+    uint64_t first_ts = 0;
+    
+    for (uint32_t i = 0; i < DeadlineQItem::MAX_SHARDS; i++) {
+      if (dqi.received_[i]) {
+        if (dqi.deadlines_[i] > agreed_ts) {
+          agreed_ts = dqi.deadlines_[i];
+        }
+        if (first_ts == 0) {
+          first_ts = dqi.deadlines_[i];
+        } else if (dqi.deadlines_[i] != first_ts) {
+          all_match = false;
+        }
+      }
+    }
+    
+    dqi.agreed_deadline_ = agreed_ts;
+    uint64_t my_ts = dqi.entry_->proposed_ts_;
+    
+    Log_info("Luigi UpdateDeadlineRecord: tid=%lu COMPLETE - agreed_ts=%lu, my_ts=%lu, all_match=%d",
+             tid, agreed_ts, my_ts, all_match);
+    
+    // Determine which case we're in
+    if (all_match) {
+      // Case 1: All proposals match - we're done!
+      dqi.entry_->agreed_ts_ = agreed_ts;
+      dqi.entry_->agree_status_.store(LUIGI_AGREE_COMPLETE);
+      
+      Log_info("Luigi: tid=%lu Case 1 - all match at ts=%lu", tid, agreed_ts);
+      
+      // Enqueue for execution completion
+      ready_txn_queue_.enqueue(dqi.entry_);
+      
+    } else if (my_ts == agreed_ts) {
+      // Case 2: I proposed the max, but others differ
+      // Wait for others to reposition and confirm (phase 2)
+      dqi.entry_->agreed_ts_ = agreed_ts;
+      dqi.entry_->agree_status_.store(LUIGI_AGREE_CONFIRMING);
+      
+      // Count how many phase-2 confirmations we need
+      uint32_t pending = 0;
+      for (uint32_t i = 0; i < DeadlineQItem::MAX_SHARDS; i++) {
+        if (dqi.received_[i] && dqi.deadlines_[i] < agreed_ts) {
+          pending++;
+        }
+      }
+      
+      Log_info("Luigi: tid=%lu Case 2 - I'm max, waiting for %u confirmations", tid, pending);
+      
+      // Reset to wait for phase 2 confirmations
+      dqi.item_count_ = 1;  // Only our own (we don't need to re-receive)
+      dqi.expected_count_ = pending + 1;  // Need confirmations from smaller ts shards
+      for (uint32_t i = 0; i < DeadlineQItem::MAX_SHARDS; i++) {
+        if (i == partition_id_) continue;
+        if (dqi.received_[i] && dqi.deadlines_[i] < agreed_ts) {
+          // Need phase 2 from this shard
+          dqi.received_[i] = false;
+          dqi.phases_[i] = 0;
+        } else if (dqi.received_[i]) {
+          // This shard also has max, count as already confirmed
+          dqi.item_count_++;
+        }
+      }
+      
+    } else {
+      // Case 3: My timestamp is smaller - need to reposition
+      dqi.entry_->agreed_ts_ = agreed_ts;
+      dqi.entry_->agree_status_.store(LUIGI_AGREE_FLUSHING);
+      
+      Log_info("Luigi: tid=%lu Case 3 - my_ts=%lu < agreed=%lu, need reposition",
+               tid, my_ts, agreed_ts);
+      
+      // Entry will be requeued by ExecTd after it notices AGREE_FLUSHING
+      ready_txn_queue_.enqueue(dqi.entry_);
+    }
+    
+    // Clean up if complete
+    if (dqi.entry_->agree_status_.load() == LUIGI_AGREE_COMPLETE) {
+      deadline_queue_.erase(tid);
+    }
+  }
+}
+
+uint64_t SchedulerLuigi::HandleRemoteDeadlineProposal(
+    uint64_t tid, uint32_t src_shard, uint64_t remote_ts, uint32_t phase) {
+  //===========================================================================
+  // RPC handler for incoming deadline proposals.
+  // 
+  // In Tiga style, we just record the proposal and check for completion.
+  // We return our proposal if we have one (for informational purposes).
+  //===========================================================================
+  
+  Log_info("Luigi HandleRemoteDeadlineProposal: tid=%lu from shard %u ts=%lu phase=%u",
+           tid, src_shard, remote_ts, phase);
+  
+  // Get our proposal to return (if we have one)
+  uint64_t my_ts = 0;
+  {
+    std::lock_guard<std::mutex> lock(deadline_queue_mutex_);
+    auto it = deadline_queue_.find(tid);
+    if (it != deadline_queue_.end() && it->second.entry_ != nullptr) {
+      my_ts = it->second.entry_->proposed_ts_;
+    }
+  }
+  
+  // Record the remote proposal (may trigger completion check)
+  UpdateDeadlineRecord(tid, src_shard, remote_ts, phase, nullptr);
+  
+  return my_ts;
+}
+
+bool SchedulerLuigi::HandleRemoteDeadlineConfirm(
+    uint64_t tid, uint32_t src_shard, uint64_t new_ts) {
+  //===========================================================================
+  // Phase 2 confirmation - remote shard has repositioned.
+  // This is essentially a phase-2 proposal.
+  //===========================================================================
+  
+  Log_info("Luigi HandleRemoteDeadlineConfirm: tid=%lu from shard %u ts=%lu",
+           tid, src_shard, new_ts);
+  
+  // Handle as phase 2 proposal
+  HandleRemoteDeadlineProposal(tid, src_shard, new_ts, 2);
+  
+  return true;
+}
+
+void SchedulerLuigi::InitiateAgreement(std::shared_ptr<LuigiLogEntry> entry) {
+  //===========================================================================
+  // Initiate Phase 1 of leader agreement (Tiga-style).
+  //
+  // 1. Record our own proposal in deadline_queue_
+  // 2. Broadcast our proposal to all involved shards (fire-and-forget)
+  // 3. Return immediately - completion happens in UpdateDeadlineRecord
+  //    when all proposals are received
+  //===========================================================================
+  
+  uint64_t tid = entry->tid_;
+  uint64_t my_ts = entry->proposed_ts_;
+  
+  Log_info("Luigi InitiateAgreement: tid=%lu, my_ts=%lu, remote_shards=%zu",
+           tid, my_ts, entry->remote_shards_.size());
+  
+  // Record our own proposal first (this initializes the DeadlineQItem)
+  UpdateDeadlineRecord(tid, partition_id_, my_ts, 1, entry);
+  
+  // Broadcast to all remote shards (fire-and-forget)
+  for (uint32_t remote_shard : entry->remote_shards_) {
+    LuigiLeaderProxy* proxy = GetLeaderProxy(remote_shard);
+    if (proxy == nullptr) {
+      Log_warn("Luigi InitiateAgreement: No proxy for shard %u", remote_shard);
+      // Without proxy, we can't reach this shard - treat as if they agree with us
+      // (In production, this would be a configuration error)
+      UpdateDeadlineRecord(tid, remote_shard, my_ts, 1, nullptr);
+      continue;
+    }
+    
+    // Build request
+    LuigiDeadlineRequest req;
+    req.tid = tid;
+    req.proposed_ts = my_ts;
+    req.src_shard = partition_id_;
+    req.phase = 1;
+    
+    // Fire-and-forget async RPC (like Tiga's Future::safe_release)
+    auto fut = proxy->async_DeadlinePropose(req);
+    // Don't wait for result - completion happens when we receive RPCs back
+    // The rrr framework will clean up the future
+    
+    Log_info("Luigi InitiateAgreement: sent proposal to shard %u", remote_shard);
+  }
+}
+
+void SchedulerLuigi::SendRepositionConfirmations(std::shared_ptr<LuigiLogEntry> entry) {
+  //===========================================================================
+  // Phase 2: We were in Case 3 (had smaller timestamp), have repositioned,
+  // and now notify others that we've updated.
+  //
+  // This is sent to all involved shards so they can complete their Case 2 wait.
+  //===========================================================================
+  
+  uint64_t tid = entry->tid_;
+  uint64_t new_ts = entry->proposed_ts_;  // Should now be agreed_ts_
+  
+  Log_info("Luigi SendRepositionConfirmations: tid=%lu, new_ts=%lu", tid, new_ts);
+  
+  for (uint32_t remote_shard : entry->remote_shards_) {
+    LuigiLeaderProxy* proxy = GetLeaderProxy(remote_shard);
+    if (proxy == nullptr) {
+      Log_warn("Luigi SendRepositionConfirmations: No proxy for shard %u", remote_shard);
+      continue;
+    }
+    
+    LuigiDeadlineRequest req;
+    req.tid = tid;
+    req.proposed_ts = new_ts;
+    req.src_shard = partition_id_;
+    req.phase = 2;  // Phase 2 = confirmation
+    
+    // Fire-and-forget async RPC
+    auto fut = proxy->async_DeadlineConfirm(req);
+    
+    Log_info("Luigi SendRepositionConfirmations: sent phase-2 to shard %u", remote_shard);
+  }
+  
+  // Clean up our deadline queue entry
+  {
+    std::lock_guard<std::mutex> lock(deadline_queue_mutex_);
+    deadline_queue_.erase(tid);
   }
 }
 

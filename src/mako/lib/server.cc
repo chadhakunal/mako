@@ -63,7 +63,43 @@ namespace mako
         partition_id_ = partition_id;
         luigi_scheduler_ = new janus::SchedulerLuigi();
         luigi_scheduler_->SetPartitionId(partition_id);
-        luigi_scheduler_->SetDbTables(&open_tables_table_id);  // Pass DB tables reference
+        
+        // Set up callbacks that delegate to Mako's DB operations
+        // Capture 'this' to access open_tables_table_id
+        luigi_scheduler_->SetReadCallback(
+            [this](int table_id, const std::string& key, std::string& value_out) -> bool {
+                auto it = open_tables_table_id.find(table_id);
+                if (it == open_tables_table_id.end() || it->second == nullptr) {
+                    return false;
+                }
+                return it->second->shard_get(lcdf::Str(key), value_out);
+            }
+        );
+        
+        luigi_scheduler_->SetWriteCallback(
+            [this](int table_id, const std::string& key, const std::string& value) -> bool {
+                auto it = open_tables_table_id.find(table_id);
+                if (it == open_tables_table_id.end() || it->second == nullptr) {
+                    return false;
+                }
+                try {
+                    it->second->shard_put(lcdf::Str(key), value);
+                    return true;
+                } catch (...) {
+                    return false;
+                }
+            }
+        );
+        
+        // Replication callback - TODO: integrate with add_log_to_nc
+        luigi_scheduler_->SetReplicationCallback(
+            [this](const std::shared_ptr<janus::LuigiLogEntry>& entry) -> bool {
+                // TODO: Serialize entry and call add_log_to_nc
+                // For now, just return success (replication not yet implemented)
+                return true;
+            }
+        );
+        
         luigi_scheduler_->Start();
         Log_info("Luigi scheduler initialized for partition %d", partition_id);
     }
