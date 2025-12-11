@@ -740,6 +740,7 @@ namespace mako
         luigi_scheduler_->LuigiDispatchFromRequest(
             req->txn_id,
             req->expected_time_us,
+            req->worker_id,
             0 /*bound*/,  // deadline = expected_time
             ops,
             involved_shards,

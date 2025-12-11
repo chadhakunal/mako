@@ -137,7 +137,7 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
 
   // Update local watermark once this shard considers the txn committed
   if (scheduler_ != nullptr) {
-    scheduler_->UpdateLocalWatermark(commit_ts);
+    scheduler_->UpdateLocalWatermark(commit_ts, entry->worker_id_);
   }
 
 done:

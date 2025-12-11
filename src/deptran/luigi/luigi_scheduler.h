@@ -60,6 +60,7 @@ class SchedulerLuigi : public SchedulerClassic {
   void LuigiDispatchFromRequest(
       uint64_t txn_id,
       uint64_t expected_time_us,  // absolute execution deadline in microseconds
+      uint32_t worker_id,         // logical worker/partition id
       uint32_t bound,
       const std::vector<LuigiOp>& ops,
       const std::vector<uint32_t>& involved_shards,
@@ -135,9 +136,18 @@ class SchedulerLuigi : public SchedulerClassic {
   std::atomic<uint64_t> local_watermark_{0};
 
  public:
-  uint64_t GetLocalWatermark() const { return local_watermark_.load(); }
-  void UpdateLocalWatermark(uint64_t ts) {
-    uint64_t cur = local_watermark_.load();
+  uint64_t GetLocalWatermark(uint32_t worker_id = 0) const {
+    auto it = worker_watermarks_.find(worker_id);
+    if (it != worker_watermarks_.end()) return it->second.load();
+    return local_watermark_.load();
+  }
+  void UpdateLocalWatermark(uint64_t ts, uint32_t worker_id = 0) {
+    // Per-worker update
+    auto &atom = worker_watermarks_[worker_id];
+    uint64_t cur = atom.load();
+    while (ts > cur && !atom.compare_exchange_weak(cur, ts)) {}
+    // Per-partition legacy update
+    cur = local_watermark_.load();
     while (ts > cur && !local_watermark_.compare_exchange_weak(cur, ts)) {}
   }
 

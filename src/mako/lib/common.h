@@ -275,6 +275,7 @@ namespace mako
         uint32_t req_nr;               // Request number (for matching response)
         uint64_t txn_id;               // Unique transaction ID
         uint64_t expected_time_us;     // Execution deadline in microseconds
+        uint32_t worker_id;            // Logical worker/partition ID (low bits in ts)
         uint16_t num_ops;              // Number of operations in this dispatch
         // Each op: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
         // op_type: 0=read, 1=write

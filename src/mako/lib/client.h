@@ -30,10 +30,11 @@ namespace mako
             delete request_;
         }
 
-        void set_header(uint16_t server_id, uint64_t txn_id, uint64_t expected_time_us) {
+        void set_header(uint16_t server_id, uint64_t txn_id, uint64_t expected_time_us, uint32_t worker_id) {
             request_->target_server_id = server_id;
             request_->txn_id = txn_id;
             request_->expected_time_us = expected_time_us;
+            request_->worker_id = worker_id;
         }
 
         void set_req_nr(uint32_t req_nr) {

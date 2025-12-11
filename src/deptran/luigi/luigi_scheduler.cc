@@ -63,6 +63,7 @@ uint64_t SchedulerLuigi::GetMicrosecondTimestamp() {
 void SchedulerLuigi::LuigiDispatchFromRequest(
     uint64_t txn_id,
     uint64_t expected_time_us,
+    uint32_t worker_id,
     uint32_t bound,
     const std::vector<LuigiOp>& ops,
     const std::vector<uint32_t>& involved_shards,
@@ -70,6 +71,7 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
   
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
   entry->send_time_ = expected_time_us;
+  entry->worker_id_ = worker_id;
   entry->bound_ = bound;
   entry->proposed_ts_ = expected_time_us;  // already absolute deadline
   entry->ops_ = ops;

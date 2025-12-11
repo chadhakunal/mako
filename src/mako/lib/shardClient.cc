@@ -623,7 +623,7 @@ namespace mako
             // Create builder for this shard if not exists
             if (requests_per_shard.find(dst_shard_idx) == requests_per_shard.end()) {
                 auto* builder = new LuigiDispatchRequestBuilder();
-                builder->set_header(server_id, txn_id, expected_time_us);
+                builder->set_header(server_id, txn_id, expected_time_us, par_id);
                 requests_per_shard[dst_shard_idx] = builder;
                 shard_order.push_back(dst_shard_idx);
             }

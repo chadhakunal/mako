@@ -90,6 +90,7 @@ struct LuigiLogEntry {
   std::atomic<bool> ts_agreed_{false};     // All shards agreed on timestamp?
   std::atomic<bool> exec_agreed_{false};   // Execution outcome agreed?
   uint32_t requeue_count_ = 0;             // How many times re-queued (for Case 3 repositioning)
+  uint32_t worker_id_ = 0;                 // Logical worker/partition ID (low bits in ts)
 
   //--- Transaction identity ---
   txnid_t tid_ = 0;                              // Unique transaction ID
