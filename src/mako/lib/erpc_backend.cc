@@ -58,7 +58,7 @@ void ErpcBackend::RequestHandler(erpc::ReqHandle *req_handle, void *_context) {
 
         resp->result = sync_util::sync_logger::retrieveShardW();
         resp->req_nr = req->req_nr;
-        resp->status = ErrorCode::SUCCESS;
+        resp->status = MakoErrorCode::OK;
         resp->shard_index = TThread::get_shard_index();
 
         auto &respX = req_handle->pre_resp_msgbuf_;
@@ -78,7 +78,7 @@ void ErpcBackend::RequestHandler(erpc::ReqHandle *req_handle, void *_context) {
 
         resp->result = 1;
         resp->req_nr = req->req_nr;
-        resp->status = ErrorCode::SUCCESS;
+        resp->status = MakoErrorCode::OK;
         resp->shard_index = TThread::get_shard_index();
 
         auto &respX = req_handle->pre_resp_msgbuf_;
@@ -111,7 +111,7 @@ void ErpcBackend::RequestHandler(erpc::ReqHandle *req_handle, void *_context) {
 
         resp->result = 0;
         resp->req_nr = req->req_nr;
-        resp->status = ErrorCode::SUCCESS;
+        resp->status = MakoErrorCode::OK;
         resp->shard_index = TThread::get_shard_index();
 
         auto &respX = req_handle->pre_resp_msgbuf_;

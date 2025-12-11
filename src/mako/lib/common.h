@@ -180,7 +180,7 @@ namespace mako
     
     // Luigi: Tiga-style timestamp-ordered execution
     const uint8_t luigiDispatchReqType = 14;
-
+    
     const size_t max_key_length = 64;
 #if defined(MEGA_BENCHMARK)
     const size_t max_value_length = 7000; // mega in new order 
@@ -420,10 +420,12 @@ namespace mako
         uint32_t req_nr;
     };
 
-    class ErrorCode
+    // Renamed from ErrorCode to MakoErrorCode to avoid conflict with 
+    // deptran/constants.h SUCCESS macro
+    class MakoErrorCode
     {
     public:
-        static const int SUCCESS = 0;
+        static const int OK = 0;       // Was SUCCESS, renamed to avoid macro conflict
         static const int TIMEOUT = 1;
         static const int ERROR = 2;
         static const int ABORT = 3;
@@ -436,7 +438,7 @@ namespace mako
     using continuation_t =
         std::function<void(const std::string &request, const std::string &reply)>;
     using error_continuation_t =
-        std::function<void(const std::string &request, ErrorCode err)>;
+        std::function<void(const std::string &request, MakoErrorCode err)>;
 
     // Single timestamp encoding
     static char* encode_single_timestamp(uint32_t timestamp) {

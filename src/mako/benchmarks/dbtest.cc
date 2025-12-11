@@ -1,7 +1,7 @@
 #include <iostream>
 #include <thread>
 #include <mako.hh>
-#include "luigi/luigi_owd.h"
+#include "deptran/luigi/luigi_owd.h"
 
 using namespace std;
 using namespace util;

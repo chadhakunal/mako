@@ -518,3 +518,36 @@ abstract service ClientControl {
     defer client_start ( | );
     defer DispatchTxn(TxDispatchRequest req | TxReply result);
 }
+
+//=============================================================================
+// Luigi: Tiga-style timestamp ordering for Mako leaders
+//=============================================================================
+
+// Request for Phase 1: propose deadline/timestamp
+struct LuigiDeadlineRequest {
+    i64 tid;              // Transaction ID (unique key)
+    i64 proposed_ts;      // Proposing leader's hold-release timestamp
+    i32 src_shard;        // Source shard ID
+    i32 phase;            // 1 = initial proposal, 2 = confirmation after reposition
+}
+
+// Response for Phase 1: contains this shard's proposal
+struct LuigiDeadlineResponse {
+    i64 tid;              // Transaction ID
+    i64 proposed_ts;      // This shard's proposal (may differ from requester's)
+    i32 shard_id;         // This shard's ID
+    i32 status;           // 0 = success, non-zero = error
+}
+
+// Luigi leader-to-leader communication service
+abstract service LuigiLeader {
+    // Phase 1: Exchange timestamp proposals between leaders
+    // Called when a leader has a multi-shard txn at head of priority queue
+    // Returns this shard's proposed timestamp
+    defer DeadlinePropose(LuigiDeadlineRequest req | LuigiDeadlineResponse res);
+    
+    // Phase 2: Confirm reposition complete (for Case 3 shards)
+    // Called after a shard has repositioned to agreed_ts
+    // No response needed - this is a notification
+    defer DeadlineConfirm(LuigiDeadlineRequest req | i32 status);
+}
