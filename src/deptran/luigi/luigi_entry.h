@@ -1,10 +1,11 @@
 #pragma once
 
-#include "../__dep__.h"
-#include "../scheduler.h"
-#include "../tx.h"
+#include "deptran/__dep__.h"
+#include "deptran/scheduler.h"
+#include "deptran/tx.h"
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <mutex>
@@ -16,17 +17,20 @@
 namespace janus {
 
 //=============================================================================
-// Execution Status (aligned with Tiga's EXEC_STATUS from TigaMessage.h)
+// Execution Status (simplified for Option D - no speculative execution)
+//
+// With agreement-before-execution:
+// - Single-shard: INIT -> DIRECT -> COMPLETE
+// - Multi-shard: INIT -> (wait for agreement) -> DIRECT -> COMPLETE
+//
+// We don't need SPEC, ROLLBACK, REPOSITIONED since we don't execute
+// speculatively.
 //=============================================================================
 enum LuigiExecStatus {
-  LUIGI_EXEC_INIT = 1,        // Not started (Tiga: EXEC_INIT)
-  LUIGI_EXEC_SPEC = 2,        // Speculatively executing (Tiga: EXEC_SPEC)
-  LUIGI_EXEC_COMMITTING = 3,  // Agreement done, committing (Tiga: EXEC_COMMITING)
-  LUIGI_EXEC_ROLLBACK = 4,    // Need to rollback spec exec (Tiga: EXEC_ROLLBACK)
-  LUIGI_EXEC_REPOSITIONED = 5,// After rollback, repositioned (Tiga: EXEC_REPOSITIONED)
-  LUIGI_EXEC_DIRECT = 6,      // Direct execution, no spec (Tiga: EXEC_DIRECT)
-  LUIGI_EXEC_COMPLETE = 7,    // Done (Tiga: EXEC_COMPLETE)
-  LUIGI_EXEC_ABANDONED = 8    // Abandoned due to conflict (Tiga: EXEC_ABANDONED)
+  LUIGI_EXEC_INIT = 1,        // Not started yet
+  LUIGI_EXEC_DIRECT = 2,      // Executing (agreement done for multi-shard)
+  LUIGI_EXEC_COMPLETE = 3,    // Execution finished
+  LUIGI_EXEC_ABANDONED = 4    // Abandoned due to error
 };
 
 //=============================================================================

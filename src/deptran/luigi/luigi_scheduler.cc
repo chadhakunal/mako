@@ -266,6 +266,10 @@ void SchedulerLuigi::HoldReleaseTd() {
 // This thread:
 // 1. Pulls txns from ready_txn_queue_ (deadline has passed, ready to execute)
 // 2. Delegates execution to LuigiExecutor (handles DB ops, multi-shard, replication)
+// 3. Handles post-execution state:
+//    - AGREE_COMPLETE: Normal completion, no further action
+//    - AGREE_FLUSHING: Requeue for reposition (Case 3)
+//    - AGREE_CONFIRMING: Wait for round 2 confirmations (Case 2)
 //=============================================================================
 
 void SchedulerLuigi::ExecTd() {
@@ -275,8 +279,45 @@ void SchedulerLuigi::ExecTd() {
     size_t cnt = ready_txn_queue_.try_dequeue_bulk(entries, 64);
 
     for (size_t i = 0; i < cnt; i++) {
+      auto& entry = entries[i];
+      
       // Delegate to executor for clean separation of concerns
-      executor_.Execute(entries[i]);
+      executor_.Execute(entry);
+      
+      // Handle post-execution state based on agreement outcome
+      LuigiAgreeStatus status = static_cast<LuigiAgreeStatus>(entry->agree_status_.load());
+      
+      switch (status) {
+        case LUIGI_AGREE_COMPLETE:
+          // Normal completion - nothing more to do
+          // Execute() already called the callback
+          break;
+          
+        case LUIGI_AGREE_FLUSHING:
+          // Case 3: Need to reposition in priority queue
+          // Execute() updated proposed_ts_ to agreed_ts_
+          // Requeue for re-processing at new timestamp
+          Log_info("Luigi ExecTd: txn %lu needs reposition, requeuing to incoming queue",
+                   entry->tid_);
+          RequeueForReposition(entry);
+          break;
+          
+        case LUIGI_AGREE_CONFIRMING:
+          // Case 2: Waiting for round 2 confirmations
+          // TODO: Register this entry to receive confirmation callbacks
+          // For now, we just log - actual confirmation handling needs RPC infra
+          Log_info("Luigi ExecTd: txn %lu waiting for confirmations (TBD)",
+                   entry->tid_);
+          // The entry will be re-triggered when confirmations arrive
+          // TODO: Add to a "waiting for confirmation" map
+          break;
+          
+        default:
+          // Unexpected state - log warning
+          Log_warn("Luigi ExecTd: txn %lu has unexpected status %d after Execute()",
+                   entry->tid_, static_cast<int>(status));
+          break;
+      }
     }
 
     if (cnt == 0) {

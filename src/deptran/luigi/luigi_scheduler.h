@@ -1,16 +1,20 @@
 #pragma once
 
-#include "../scheduler.h"
-#include "../tx.h"
-#include "../concurrentqueue.h"  // moodycamel lock-free queue (same as Tiga uses)
+#include "deptran/__dep__.h"
+#include "deptran/classic/scheduler.h"  // For SchedulerClassic base class
+#include "deptran/tx.h"
+#include "deptran/concurrentqueue.h"  // moodycamel lock-free queue
+
 #include "luigi_entry.h"
 #include "luigi_executor.h"
 
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
+#include <functional>
 
 // Forward declaration - the actual type is defined in benchmarks/abstract_ordered_index.h
 class abstract_ordered_index;
@@ -38,6 +42,14 @@ class SchedulerLuigi : public SchedulerClassic {
  public:
   SchedulerLuigi();
   virtual ~SchedulerLuigi();
+
+  // Required override from SchedulerClassic - Luigi doesn't use row-level guards
+  // since it uses timestamp ordering instead of locking
+  virtual bool Guard(Tx &tx_box, mdb::Row *row, int col_id, bool write=true) override {
+    // Luigi uses timestamp-based ordering, not row-level locking
+    // Always return true (no guard needed)
+    return true;
+  }
 
   // Start background threads
   void Start();

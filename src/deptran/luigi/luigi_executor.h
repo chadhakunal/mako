@@ -86,10 +86,13 @@ class LuigiExecutor {
    * 3. All leaders agree on max(proposed timestamps)
    * 4. Txn executes at the agreed timestamp
    * 
-   * The 3-case outcome:
+   * With Option D (agreement-before-execution), the 3-case outcome:
    * Case 1: All proposals matched -> release immediately (0.5 WRTT)
    * Case 2: This leader used agreed_ts -> WAIT for round 2 confirmation
-   * Case 3: This leader used smaller ts -> ROLLBACK, update ts, reposition
+   * Case 3: This leader used smaller ts -> REPOSITION to agreed_ts
+   * 
+   * NOTE: We do NOT execute speculatively. Execution happens only after
+   *       agreement is complete. This eliminates the need for rollbacks.
    * 
    * @param entry The transaction entry (may update entry->agreed_ts_)
    * @return AgreementResult indicating next action
@@ -98,23 +101,25 @@ class LuigiExecutor {
    *              Multi-shard agreement requires RPC to other leaders.
    */
   enum class AgreementResult {
-    SUCCESS,           // Agreement complete, proceed with execution
-    WAIT_ROUND2,       // Case 2: Wait for confirmation (don't release yet)
-    NEEDS_ROLLBACK,    // Case 3: Rollback and reposition needed
-    FAILED             // Timeout or error
+    AGREEMENT_SUCCESS,  // Agreement complete, proceed with execution
+    WAIT_ROUND2,        // Case 2: Wait for confirmation (don't execute yet)
+    NEEDS_REPOSITION,   // Case 3: Reposition to agreed_ts, retry later
+    AGREEMENT_FAILED    // Timeout or error
   };
   AgreementResult PerformLeaderAgreement(std::shared_ptr<LuigiLogEntry> entry);
-
+  
   /**
-   * Rollback speculative execution.
+   * Phase 2 of agreement: Send confirmation after reposition.
    * 
-   * When agreement results in Case 3 (this leader used smaller ts),
-   * we need to undo the speculative writes and re-execute later.
+   * Called when a txn was in Case 3 (AGREE_FLUSHING), has repositioned
+   * in the priority queue, and is now re-entering.
    * 
-   * @param entry The transaction entry with speculative_writes_ to undo
-   * @return 0 on success, -1 on error
+   * This sends confirmations to Case 2 leaders who are waiting for us.
+   * 
+   * @param entry The transaction entry
+   * @return AgreementResult (should be SUCCESS after confirmations sent)
    */
-  int RollbackSpeculativeExecution(std::shared_ptr<LuigiLogEntry> entry);
+  AgreementResult PerformAgreementPhase2(std::shared_ptr<LuigiLogEntry> entry);
 
   //===========================================================================
   // Read/Write Operations
