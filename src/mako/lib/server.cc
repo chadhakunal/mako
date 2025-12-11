@@ -21,6 +21,10 @@
 // Luigi (Tiga-style) scheduler
 #include "deptran/luigi/luigi_entry.h"
 #include "deptran/luigi/luigi_scheduler.h"
+#include "deptran/luigi/luigi_rpc_setup.h"
+
+// rrr RPC framework (for Luigi leader agreement)
+#include "rrr/rrr.hpp"
 
 std::function<int()> ss_callback_ = nullptr;
 void register_sync_util_ss(std::function<int()> cb) {
@@ -68,7 +72,51 @@ namespace mako
         Log_info("Luigi scheduler initialized for partition %d", partition_id);
     }
 
+    void ShardReceiver::SetupLuigiRpc(
+        rrr::Server* rpc_server,
+        rusty::Arc<rrr::PollThread> poll_thread,
+        const std::map<uint32_t, std::string>& shard_addresses) {
+        
+        if (luigi_scheduler_ == nullptr) {
+            Log_error("SetupLuigiRpc: Luigi scheduler not initialized!");
+            return;
+        }
+        
+        if (luigi_rpc_setup_ != nullptr) {
+            Log_warn("SetupLuigiRpc: Already set up");
+            return;
+        }
+        
+        luigi_rpc_setup_ = new janus::LuigiRpcSetup();
+        
+        // Register the RPC service so we can receive proposals from other leaders
+        if (rpc_server != nullptr) {
+            bool ok = luigi_rpc_setup_->SetupService(rpc_server, luigi_scheduler_);
+            if (!ok) {
+                Log_error("SetupLuigiRpc: Failed to register service");
+            }
+        } else {
+            Log_warn("SetupLuigiRpc: No RPC server provided, skipping service registration");
+        }
+        
+        // Connect to other shard leaders
+        if (!shard_addresses.empty() && poll_thread) {
+            int connected = luigi_rpc_setup_->ConnectToLeaders(
+                shard_addresses, poll_thread, luigi_scheduler_);
+            Log_info("Luigi RPC: connected to %d remote leaders", connected);
+        } else {
+            Log_info("Luigi RPC: No remote shard addresses provided (single-shard mode)");
+        }
+    }
+
     void ShardReceiver::StopLuigiScheduler() {
+        // Clean up RPC first
+        if (luigi_rpc_setup_ != nullptr) {
+            luigi_rpc_setup_->Shutdown();
+            delete luigi_rpc_setup_;
+            luigi_rpc_setup_ = nullptr;
+        }
+        
         if (luigi_scheduler_ != nullptr) {
             luigi_scheduler_->Stop();
             delete luigi_scheduler_;
