@@ -131,6 +131,16 @@ class SchedulerLuigi : public SchedulerClassic {
   //==========================================================================
   LuigiExecutor executor_;
 
+  // Watermark: per-local-partition last committed timestamp
+  std::atomic<uint64_t> local_watermark_{0};
+
+ public:
+  uint64_t GetLocalWatermark() const { return local_watermark_.load(); }
+  void UpdateLocalWatermark(uint64_t ts) {
+    uint64_t cur = local_watermark_.load();
+    while (ts > cur && !local_watermark_.compare_exchange_weak(cur, ts)) {}
+  }
+
   //==========================================================================
   // LEADER AGREEMENT STATE (Tiga-style bidirectional broadcast)
   // 
