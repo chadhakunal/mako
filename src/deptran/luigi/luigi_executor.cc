@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <algorithm>
+#include <set>
 
 #include "deptran/__dep__.h"  // For logging macros
 
@@ -239,42 +240,91 @@ int LuigiExecutor::ExecuteWrite(const LuigiOp& op) {
 }
 
 //=============================================================================
-// Execute All Operations
+// Execute All Operations (LOCAL KEYS ONLY)
+//
+// IMPORTANT: In a multi-shard transaction, each shard only executes
+// operations for keys that belong to it. The coordinator sends the full
+// transaction to all involved shards, but each shard filters by local_keys_.
+//
+// Example: Transaction touches keys A (shard 1) and B (shard 2)
+//   - Shard 1: local_keys_ = {A}, only executes ops where key == A
+//   - Shard 2: local_keys_ = {B}, only executes ops where key == B
 //=============================================================================
 
 int LuigiExecutor::ExecuteAllOps(std::shared_ptr<LuigiLogEntry> entry) {
   entry->read_results_.clear();
   
-  // Separate reads and writes for cleaner execution order
-  // (In some isolation levels, reads should happen before writes)
+  // Build a set of local keys for O(1) lookup
+  // local_keys_ contains the keys that THIS shard owns
+  std::set<std::string> local_key_set;
+  for (int32_t k : entry->local_keys_) {
+    // Convert int32_t key to string for comparison with op.key
+    local_key_set.insert(std::to_string(k));
+  }
+  
+  // If local_keys_ is empty but we have shard_to_keys_, use that
+  if (local_key_set.empty() && !entry->shard_to_keys_.empty()) {
+    // Find our shard's keys from shard_to_keys_
+    auto it = entry->shard_to_keys_.find(partition_id_);
+    if (it != entry->shard_to_keys_.end()) {
+      for (int32_t k : it->second) {
+        local_key_set.insert(std::to_string(k));
+      }
+    }
+  }
+  
+  // Determine if we should filter by local keys
+  // If local_key_set is empty, assume single-shard txn and execute all ops
+  bool should_filter = !local_key_set.empty();
+  
+  Log_debug("Luigi ExecuteAllOps: txn %lu has %zu ops, %zu local keys, filter=%d",
+            entry->tid_, entry->ops_.size(), local_key_set.size(), should_filter);
   
   //-------------------------------------------------------------------------
-  // Phase 1: Execute all READ operations
+  // Phase 1: Execute READ operations (only for local keys)
   //-------------------------------------------------------------------------
   for (auto& op : entry->ops_) {
     if (op.op_type == LUIGI_OP_READ) {
-      std::string value;
-      int ret = ExecuteRead(op, value);
-      if (ret != 0) {
-        Log_error("Luigi ExecuteAllOps: Read failed for txn %lu", entry->tid_);
-        return -1;
+      // Check if this key belongs to us
+      bool is_local = !should_filter || (local_key_set.count(op.key) > 0);
+      
+      if (is_local) {
+        std::string value;
+        int ret = ExecuteRead(op, value);
+        if (ret != 0) {
+          Log_error("Luigi ExecuteAllOps: Read failed for txn %lu, key=%s", 
+                    entry->tid_, op.key.c_str());
+          return -1;
+        }
+        entry->read_results_.push_back(value);
+        op.executed = true;
+      } else {
+        Log_debug("Luigi ExecuteAllOps: Skipping remote read key=%s for txn %lu",
+                  op.key.c_str(), entry->tid_);
       }
-      entry->read_results_.push_back(value);
-      op.executed = true;
     }
   }
   
   //-------------------------------------------------------------------------
-  // Phase 2: Execute all WRITE operations
+  // Phase 2: Execute WRITE operations (only for local keys)
   //-------------------------------------------------------------------------
   for (auto& op : entry->ops_) {
     if (op.op_type == LUIGI_OP_WRITE) {
-      int ret = ExecuteWrite(op);
-      if (ret != 0) {
-        Log_error("Luigi ExecuteAllOps: Write failed for txn %lu", entry->tid_);
-        return -1;
+      // Check if this key belongs to us
+      bool is_local = !should_filter || (local_key_set.count(op.key) > 0);
+      
+      if (is_local) {
+        int ret = ExecuteWrite(op);
+        if (ret != 0) {
+          Log_error("Luigi ExecuteAllOps: Write failed for txn %lu, key=%s",
+                    entry->tid_, op.key.c_str());
+          return -1;
+        }
+        op.executed = true;
+      } else {
+        Log_debug("Luigi ExecuteAllOps: Skipping remote write key=%s for txn %lu",
+                  op.key.c_str(), entry->tid_);
       }
-      op.executed = true;
     }
   }
   
