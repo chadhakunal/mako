@@ -766,6 +766,20 @@ namespace mako
             }
         }
         
+        // Watermark gating (local shard only): ensure local watermark >= commit_ts
+        if (result_status == MakoErrorCode::OK) {
+            uint64_t attempts = 0;
+            while (luigi_scheduler_->GetLocalWatermark() < result_commit_ts && attempts < 50) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                attempts++;
+            }
+            if (luigi_scheduler_->GetLocalWatermark() < result_commit_ts) {
+                Warning("Luigi watermark not advanced enough for txn %lu (commit_ts=%lu, wm=%lu)",
+                        req->txn_id, result_commit_ts, luigi_scheduler_->GetLocalWatermark());
+                result_status = MakoErrorCode::ABORT;
+            }
+        }
+
         // Populate response
         resp->status = result_status;
         resp->commit_timestamp = result_commit_ts;
