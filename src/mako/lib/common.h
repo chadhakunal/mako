@@ -184,6 +184,9 @@ namespace mako
     // Luigi: OWD (One-Way Delay) ping for latency measurement
     const uint8_t owdPingReqType = 15;
     
+    // Luigi: Status check for async dispatch polling
+    const uint8_t luigiStatusReqType = 16;
+    
     const size_t max_key_length = 64;
 #if defined(MEGA_BENCHMARK)
     const size_t max_value_length = 7000; // mega in new order 
@@ -313,6 +316,31 @@ namespace mako
     struct owd_ping_response_t {
         uint32_t req_nr;               // Echo back request number
         int status;                    // 0 = OK
+    };
+
+    //=========================================================================
+    // Luigi Status Check: Poll for completion of async dispatch
+    //=========================================================================
+    
+    // Status values for async Luigi dispatch
+    const int LUIGI_STATUS_QUEUED = 100;     // Txn queued, not yet complete
+    const int LUIGI_STATUS_COMPLETE = 101;   // Txn completed successfully
+    const int LUIGI_STATUS_ABORTED = 102;    // Txn aborted
+    const int LUIGI_STATUS_NOT_FOUND = 103;  // Txn not found (expired or invalid)
+    
+    struct luigi_status_request_t {
+        uint16_t target_server_id;     // Target shard
+        uint32_t req_nr;               // Request number
+        uint64_t txn_id;               // Transaction ID to check
+    };
+    
+    struct luigi_status_response_t {
+        uint32_t req_nr;
+        uint64_t txn_id;
+        int status;                    // QUEUED, COMPLETE, ABORTED, NOT_FOUND
+        uint64_t commit_timestamp;     // Valid only if COMPLETE
+        uint16_t num_results;          // Number of read results (valid if COMPLETE)
+        char results_data[luigi_max_ops * max_value_length];
     };
 
     struct lock_request_t

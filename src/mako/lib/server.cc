@@ -209,6 +209,9 @@ namespace mako
         case luigiDispatchReqType:
             HandleLuigiDispatch(reqBuf, respBuf, respLen);
             break;
+        case luigiStatusReqType:
+            HandleLuigiStatusCheck(reqBuf, respBuf, respLen);
+            break;
         case owdPingReqType:
             HandleOwdPing(reqBuf, respBuf, respLen);
             break;
@@ -712,12 +715,17 @@ namespace mako
     }
 
     //=========================================================================
-    // HandleLuigiDispatch: Luigi (Tiga-style) timestamp-ordered execution
+    // HandleLuigiDispatch: Luigi (Tiga-style) ASYNC timestamp-ordered execution
     //
     // This handler receives a transaction with a future timestamp deadline,
-    // parses the operations, and dispatches to the Luigi scheduler.
-    // The scheduler will queue the transaction and execute it when its
-    // deadline arrives, in timestamp order.
+    // parses the operations, dispatches to the Luigi scheduler, and returns
+    // IMMEDIATELY with QUEUED status. The caller must poll for completion.
+    //
+    // Flow:
+    //   1. Parse request, extract ops and involved shards
+    //   2. Queue in scheduler with async callback
+    //   3. Return QUEUED immediately (thread freed!)
+    //   4. When scheduler completes, callback stores result for polling
     //=========================================================================
     void ShardReceiver::HandleLuigiDispatch(char *reqBuf, char *respBuf, size_t &respLen)
     {
@@ -781,58 +789,139 @@ namespace mako
             return;
         }
         
-        // For synchronous execution: use a condition variable to wait for completion
-        std::mutex completion_mutex;
-        std::condition_variable completion_cv;
-        bool completed = false;
-        int result_status = MakoErrorCode::OK;
-        uint64_t result_commit_ts = 0;
-        std::vector<std::string> result_read_values;
+        // Capture txn_id for the async callback
+        uint64_t txn_id = req->txn_id;
         
-        // Dispatch to Luigi scheduler with completion callback
-        // expected_time is the timestamp at which the transaction should execute
-        // involved_shards tells the scheduler which other shards are in this txn
+        // Dispatch to Luigi scheduler with async completion callback
+        // The callback will store the result for later polling
         luigi_scheduler_->LuigiDispatchFromRequest(
-            req->txn_id,
+            txn_id,
             req->expected_time,
             ops,
             involved_shards,
-            [&](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
-                std::lock_guard<std::mutex> lock(completion_mutex);
-                result_status = status;
-                result_commit_ts = commit_ts;
-                result_read_values = read_results;
-                completed = true;
-                completion_cv.notify_one();
+            [this, txn_id](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
+                // Store result for polling - this runs async when txn completes
+                StoreLuigiResult(txn_id, status, commit_ts, read_results);
             }
         );
         
-        // Wait for completion (with timeout)
+        // Return QUEUED immediately - don't wait for execution!
+        resp->status = LUIGI_STATUS_QUEUED;
+        resp->commit_timestamp = 0;
+        resp->num_results = 0;
+        
+        Debug("Luigi dispatch queued txn %lu, expected_time %lu", txn_id, req->expected_time);
+    }
+
+    //=========================================================================
+    // HandleLuigiStatusCheck: Poll for completion of async Luigi dispatch
+    //
+    // Called by coordinator to check if a transaction has completed.
+    // Returns QUEUED if still pending, COMPLETE/ABORTED with results if done.
+    //=========================================================================
+    void ShardReceiver::HandleLuigiStatusCheck(char *reqBuf, char *respBuf, size_t &respLen)
+    {
+        auto *req = reinterpret_cast<luigi_status_request_t *>(reqBuf);
+        auto *resp = reinterpret_cast<luigi_status_response_t *>(respBuf);
+        
+        resp->req_nr = req->req_nr;
+        resp->txn_id = req->txn_id;
+        respLen = sizeof(luigi_status_response_t);
+        
+        // Look up result in completed txns map
         {
-            std::unique_lock<std::mutex> lock(completion_mutex);
-            // Wait up to 10 seconds for completion
-            if (!completion_cv.wait_for(lock, std::chrono::seconds(10), [&]{ return completed; })) {
-                Warning("Luigi dispatch timeout for txn %lu", req->txn_id);
-                resp->status = MakoErrorCode::ABORT;
+            std::shared_lock<std::shared_mutex> lock(luigi_results_mutex_);
+            auto it = luigi_completed_txns_.find(req->txn_id);
+            
+            if (it == luigi_completed_txns_.end()) {
+                // Not found - either still queued or expired
+                // Check if scheduler knows about this txn
+                if (luigi_scheduler_ != nullptr && 
+                    luigi_scheduler_->HasPendingTxn(req->txn_id)) {
+                    resp->status = LUIGI_STATUS_QUEUED;
+                } else {
+                    resp->status = LUIGI_STATUS_NOT_FOUND;
+                }
                 resp->commit_timestamp = 0;
                 resp->num_results = 0;
                 return;
             }
+            
+            // Found completed result
+            const auto& result = it->second;
+            resp->status = result.status;
+            resp->commit_timestamp = result.commit_timestamp;
+            resp->num_results = result.read_results.size();
+            
+            // Copy read results to response buffer
+            char* results_ptr = resp->results_data;
+            for (const auto& val : result.read_results) {
+                uint16_t vlen = val.size();
+                memcpy(results_ptr, &vlen, sizeof(uint16_t));
+                results_ptr += sizeof(uint16_t);
+                memcpy(results_ptr, val.data(), vlen);
+                results_ptr += vlen;
+            }
         }
         
-        // Populate response
-        resp->status = result_status;
-        resp->commit_timestamp = result_commit_ts;
-        resp->num_results = result_read_values.size();
+        // Optionally remove the result after successful retrieval
+        // (coordinator got it, no need to keep it)
+        if (resp->status == LUIGI_STATUS_COMPLETE || resp->status == LUIGI_STATUS_ABORTED) {
+            std::unique_lock<std::shared_mutex> lock(luigi_results_mutex_);
+            luigi_completed_txns_.erase(req->txn_id);
+        }
         
-        // Copy read results to response buffer
-        char* results_ptr = resp->results_data;
-        for (const auto& val : result_read_values) {
-            uint16_t vlen = val.size();
-            memcpy(results_ptr, &vlen, sizeof(uint16_t));
-            results_ptr += sizeof(uint16_t);
-            memcpy(results_ptr, val.data(), vlen);
-            results_ptr += vlen;
+        Debug("Luigi status check txn %lu: status=%d", req->txn_id, resp->status);
+    }
+
+    //=========================================================================
+    // StoreLuigiResult: Store completed txn result for polling
+    //
+    // Called from scheduler's async callback when a txn completes.
+    //=========================================================================
+    void ShardReceiver::StoreLuigiResult(uint64_t txn_id, int status, uint64_t commit_ts,
+                                          const std::vector<std::string>& read_results)
+    {
+        std::unique_lock<std::shared_mutex> lock(luigi_results_mutex_);
+        
+        LuigiTxnResult result;
+        result.status = (status == MakoErrorCode::OK) ? LUIGI_STATUS_COMPLETE : LUIGI_STATUS_ABORTED;
+        result.commit_timestamp = commit_ts;
+        result.read_results = read_results;
+        result.completion_time = std::chrono::steady_clock::now();
+        
+        luigi_completed_txns_[txn_id] = std::move(result);
+        
+        Debug("Luigi result stored for txn %lu: status=%d, commit_ts=%lu",
+              txn_id, result.status, commit_ts);
+        
+        // Periodic cleanup of old results
+        static int cleanup_counter = 0;
+        if (++cleanup_counter >= 100) {  // Every 100 completions
+            cleanup_counter = 0;
+            // Don't hold lock during cleanup - call outside
+            lock.unlock();
+            CleanupStaleLuigiResults(60);  // 60 second TTL
+        }
+    }
+
+    //=========================================================================
+    // CleanupStaleLuigiResults: Remove old results to prevent memory leak
+    //=========================================================================
+    void ShardReceiver::CleanupStaleLuigiResults(int ttl_seconds)
+    {
+        auto now = std::chrono::steady_clock::now();
+        auto ttl = std::chrono::seconds(ttl_seconds);
+        
+        std::unique_lock<std::shared_mutex> lock(luigi_results_mutex_);
+        
+        for (auto it = luigi_completed_txns_.begin(); it != luigi_completed_txns_.end(); ) {
+            if (now - it->second.completion_time > ttl) {
+                Debug("Luigi cleanup: removing stale result for txn %lu", it->first);
+                it = luigi_completed_txns_.erase(it);
+            } else {
+                ++it;
+            }
         }
     }
 

@@ -88,6 +88,7 @@ namespace mako
         
         // Luigi dispatch callback and response storage
         void LuigiDispatchCallback(char *respBuf);
+        void LuigiStatusResponseHandler(char *respBuf);  // Handles status poll responses
         std::map<int, uint64_t> luigi_execute_timestamps_;
         std::map<int, std::vector<std::string>> luigi_read_results_;
 

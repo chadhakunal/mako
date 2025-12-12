@@ -1,5 +1,7 @@
 
 #include <iostream>
+#include <thread>
+#include <chrono>
 #include "lib/fasttransport.h"
 #include "lib/promise.h"
 #include "lib/client.h"
@@ -557,28 +559,56 @@ namespace mako
     }
 
     //=========================================================================
-    // Luigi: Timestamp-ordered execution dispatch
+    // Luigi: Timestamp-ordered execution dispatch (ASYNC with polling)
+    //
+    // Flow:
+    //   1. Send dispatch to all shards
+    //   2. Get QUEUED ACKs immediately (servers don't block)
+    //   3. Poll for completion (status check RPCs)
+    //   4. Return when all shards report COMPLETE
     //=========================================================================
     
     void ShardClient::LuigiDispatchCallback(char *respBuf) {
         auto *resp = reinterpret_cast<luigi_dispatch_response_t *>(respBuf);
         status_received.push_back(resp->status);
         
-        // Parse read results from response
-        std::vector<std::string> read_values;
-        char* data_ptr = resp->results_data;
-        for (uint16_t i = 0; i < resp->num_results; i++) {
-            // Read value length (2 bytes)
-            uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
-            data_ptr += sizeof(uint16_t);
-            read_values.emplace_back(data_ptr, vlen);
-            data_ptr += vlen;
+        // For QUEUED responses, we don't have results yet
+        // For sync responses (if any shard returns COMPLETE directly), parse results
+        if (resp->status != LUIGI_STATUS_QUEUED) {
+            std::vector<std::string> read_values;
+            char* data_ptr = resp->results_data;
+            for (uint16_t i = 0; i < resp->num_results; i++) {
+                uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
+                data_ptr += sizeof(uint16_t);
+                read_values.emplace_back(data_ptr, vlen);
+                data_ptr += vlen;
+            }
+            
+            int response_idx = status_received.size() - 1;
+            luigi_execute_timestamps_[response_idx] = resp->commit_timestamp;
+            luigi_read_results_[response_idx] = std::move(read_values);
         }
+    }
+    
+    void ShardClient::LuigiStatusResponseHandler(char *respBuf) {
+        auto *resp = reinterpret_cast<luigi_status_response_t *>(respBuf);
+        status_received.push_back(resp->status);
         
-        // Store using response index (will be mapped to shard by caller)
-        int response_idx = status_received.size() - 1;
-        luigi_execute_timestamps_[response_idx] = resp->commit_timestamp;
-        luigi_read_results_[response_idx] = std::move(read_values);
+        // If complete, parse results
+        if (resp->status == LUIGI_STATUS_COMPLETE) {
+            std::vector<std::string> read_values;
+            char* data_ptr = resp->results_data;
+            for (uint16_t i = 0; i < resp->num_results; i++) {
+                uint16_t vlen = *reinterpret_cast<uint16_t*>(data_ptr);
+                data_ptr += sizeof(uint16_t);
+                read_values.emplace_back(data_ptr, vlen);
+                data_ptr += vlen;
+            }
+            
+            int response_idx = status_received.size() - 1;
+            luigi_execute_timestamps_[response_idx] = resp->commit_timestamp;
+            luigi_read_results_[response_idx] = std::move(read_values);
+        }
     }
 
     int ShardClient::remoteLuigiDispatch(
@@ -637,38 +667,144 @@ namespace mako
             kv.second->set_involved_shards(shard_order);
         }
 
-        // Set up waiting
-        Promise promise(BASIC_TIMEOUT);
-        waiting = &promise;
+        //=====================================================================
+        // PHASE 1: Send dispatch to all shards, get QUEUED ACKs
+        //=====================================================================
+        {
+            Promise promise(BASIC_TIMEOUT);
+            waiting = &promise;
+            
+            calculate_num_response_waiting_no_skip(shards_to_send_bits);
+
+            client->InvokeLuigiDispatch(
+                ++tid,
+                requests_per_shard,
+                bind(&ShardClient::LuigiDispatchCallback, this, placeholders::_1),
+                bind(&ShardClient::SendToAllGiveUpTimeout, this),
+                BASIC_TIMEOUT
+            );
+
+            // Clean up builders
+            for (auto& kv : requests_per_shard) {
+                delete kv.second;
+            }
+
+            // Wait for QUEUED ACKs
+            promise.GetReply();
+            waiting = nullptr;
+        }
         
-        calculate_num_response_waiting_no_skip(shards_to_send_bits);
-
-        // Send to all involved shards
-        client->InvokeLuigiDispatch(
-            ++tid,
-            requests_per_shard,
-            bind(&ShardClient::LuigiDispatchCallback, this, placeholders::_1),
-            bind(&ShardClient::SendToAllGiveUpTimeout, this),
-            BASIC_TIMEOUT
-        );
-
-        // Clean up builders
-        for (auto& kv : requests_per_shard) {
-            delete kv.second;
+        // Check if all responses received and all are QUEUED (or already COMPLETE)
+        if (status_received.size() != shard_order.size()) {
+            Warning("Luigi dispatch: only got %zu/%zu responses", 
+                    status_received.size(), shard_order.size());
+            return MakoErrorCode::ABORT;
         }
-
-        // Wait for responses
-        promise.GetReply();
-        waiting = nullptr;
-
-        // Map responses back to shards
-        for (size_t i = 0; i < shard_order.size() && i < status_received.size(); i++) {
-            int shard_idx = shard_order[i];
-            out_execute_timestamps[shard_idx] = luigi_execute_timestamps_[i];
-            out_read_results[shard_idx] = luigi_read_results_[i];
+        
+        // Check if any shard reported error
+        for (int status : status_received) {
+            if (status != LUIGI_STATUS_QUEUED && 
+                status != LUIGI_STATUS_COMPLETE && 
+                status != MakoErrorCode::OK) {
+                Warning("Luigi dispatch: shard returned error %d", status);
+                return MakoErrorCode::ABORT;
+            }
         }
+        
+        //=====================================================================
+        // PHASE 2: Poll for completion
+        // Wait until expected_time passes, then poll for results
+        //=====================================================================
+        
+        // Calculate how long to wait before first poll
+        // expected_time is in microseconds from epoch
+        auto now_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        if ((int64_t)expected_time > now_us) {
+            // Wait until expected_time + small buffer
+            int64_t wait_us = (int64_t)expected_time - now_us + 1000; // +1ms buffer
+            if (wait_us > 0 && wait_us < 10000000) { // Max 10 seconds
+                std::this_thread::sleep_for(std::chrono::microseconds(wait_us));
+            }
+        }
+        
+        // Poll for completion with retries
+        const int MAX_POLL_RETRIES = 100;  // Max poll attempts
+        const int POLL_INTERVAL_US = 500;   // 500us between polls
+        
+        for (int poll_attempt = 0; poll_attempt < MAX_POLL_RETRIES; poll_attempt++) {
+            // Clear previous status for this poll round
+            status_received.clear();
+            luigi_execute_timestamps_.clear();
+            luigi_read_results_.clear();
+            
+            // Send status check to all shards
+            {
+                Promise promise(BASIC_TIMEOUT);
+                waiting = &promise;
+                
+                calculate_num_response_waiting_no_skip(shards_to_send_bits);
 
-        return is_all_response_ok();
+                client->InvokeLuigiStatusCheck(
+                    ++tid,
+                    txn_id,
+                    shard_order,
+                    bind(&ShardClient::LuigiStatusResponseHandler, this, placeholders::_1),
+                    bind(&ShardClient::SendToAllGiveUpTimeout, this),
+                    BASIC_TIMEOUT
+                );
+
+                promise.GetReply();
+                waiting = nullptr;
+            }
+            
+            // Check responses
+            bool all_complete = true;
+            bool any_abort = false;
+            bool any_queued = false;
+            
+            for (size_t i = 0; i < status_received.size(); i++) {
+                int status = status_received[i];
+                if (status == LUIGI_STATUS_QUEUED) {
+                    all_complete = false;
+                    any_queued = true;
+                } else if (status == LUIGI_STATUS_ABORTED || 
+                           status == LUIGI_STATUS_NOT_FOUND ||
+                           status == MakoErrorCode::ABORT) {
+                    any_abort = true;
+                } else if (status != LUIGI_STATUS_COMPLETE && 
+                           status != MakoErrorCode::OK) {
+                    // Unknown status
+                    Warning("Luigi status check: unknown status %d", status);
+                    any_abort = true;
+                }
+            }
+            
+            if (any_abort) {
+                Warning("Luigi status check: txn %lu aborted", txn_id);
+                return MakoErrorCode::ABORT;
+            }
+            
+            if (all_complete && status_received.size() == shard_order.size()) {
+                // All shards complete! Map results and return
+                for (size_t i = 0; i < shard_order.size(); i++) {
+                    int shard_idx = shard_order[i];
+                    out_execute_timestamps[shard_idx] = luigi_execute_timestamps_[i];
+                    out_read_results[shard_idx] = luigi_read_results_[i];
+                }
+                return MakoErrorCode::OK;
+            }
+            
+            // Not all complete yet, wait and retry
+            if (any_queued) {
+                std::this_thread::sleep_for(std::chrono::microseconds(POLL_INTERVAL_US));
+            }
+        }
+        
+        // Exceeded max poll attempts
+        Warning("Luigi poll timeout for txn %lu after %d attempts", txn_id, MAX_POLL_RETRIES);
+        return MakoErrorCode::TIMEOUT;
     }
 
     //=========================================================================

@@ -83,6 +83,9 @@ namespace mako
         case luigiDispatchReqType:
             HandleLuigiDispatchReply(respBuf);
             break;
+        case luigiStatusReqType:
+            HandleLuigiStatusReply(respBuf);
+            break;
         case owdPingReqType:
             HandleOwdPingReply(respBuf);
             break;
@@ -1003,6 +1006,91 @@ namespace mako
 
         // remove from pending list
         if (num_response_waiting) num_response_waiting--;
+        if (num_response_waiting == 0) {
+            blocked = false;
+            crtReqK.req_nr = 0;
+        }
+    }
+
+    //=========================================================================
+    // Luigi Status Check: Poll for async dispatch completion
+    //=========================================================================
+
+    void Client::InvokeLuigiStatusCheck(
+        uint64_t txn_nr,
+        uint64_t txn_id,
+        const std::vector<int>& shard_indices,
+        resp_continuation_t continuation,
+        error_continuation_t error_continuation,
+        uint32_t timeout)
+    {
+        Debug("invoke InvokeLuigiStatusCheck for txn %lu, num_shards=%zu\n", txn_id, shard_indices.size());
+        
+        uint32_t reqId = ++lastReqId;
+        reqId *= 10;
+
+        uint16_t server_id = 0;
+
+        crtReqK = PendingRequestK(
+            "luigiStatusCheck",
+            reqId,
+            txn_nr,
+            server_id,
+            continuation,
+            error_continuation);
+
+        // Build data to send per shard
+        std::map<int, std::pair<char*, size_t>> data_to_send;
+
+        for (int shard_idx : shard_indices) {
+            // Allocate request buffer
+            auto* reqBuf = new luigi_status_request_t;
+            reqBuf->target_server_id = server_id;
+            reqBuf->req_nr = reqId + current_term;
+            reqBuf->txn_id = txn_id;
+            
+            data_to_send[shard_idx] = std::make_pair(
+                reinterpret_cast<char*>(reqBuf),
+                sizeof(luigi_status_request_t)
+            );
+        }
+
+        blocked = true;
+
+        // Send to all involved shards
+        transport->SendBatchRequestToAll(
+            this,
+            luigiStatusReqType,
+            config.warehouses + 5 + server_id % TThread::get_num_erpc_server(),
+            sizeof(luigi_status_response_t),
+            data_to_send
+        );
+        
+        // Clean up allocated requests
+        for (auto& kv : data_to_send) {
+            delete reinterpret_cast<luigi_status_request_t*>(kv.second.first);
+        }
+    }
+
+    void Client::HandleLuigiStatusReply(char *respBuf)
+    {
+        auto *resp = reinterpret_cast<luigi_status_response_t *>(respBuf);
+        Debug("eRPC client receives luigi status reply, req_nr: %d, crt: %d, txn_id: %lu, status: %d\n",
+              resp->req_nr, crtReqK.req_nr, resp->txn_id, resp->status);
+
+        if (resp->req_nr != crtReqK.req_nr) {
+            Debug("Received luigi status reply for wrong request; req_nr = %u, expected = %u",
+                  resp->req_nr, crtReqK.req_nr);
+            return;
+        }
+
+        // Invoke application callback
+        crtReqK.resp_continuation(respBuf);
+
+        // Track pending responses
+        if (num_response_waiting) {
+            num_response_waiting--;
+        }
         if (num_response_waiting == 0) {
             blocked = false;
             crtReqK.req_nr = 0;

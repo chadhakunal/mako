@@ -232,6 +232,15 @@ namespace mako
             error_continuation_t error_continuation,
             uint32_t timeout);
 
+        // Luigi Status Check: Poll for async dispatch completion
+        void InvokeLuigiStatusCheck(
+            uint64_t txn_nr,
+            uint64_t txn_id,                    // The txn to check status for
+            const std::vector<int>& shard_indices,  // Which shards to poll
+            resp_continuation_t continuation,
+            error_continuation_t error_continuation,
+            uint32_t timeout);
+
         void HandleGetReply(char *respBuf);
         void HandleScanReply(char *respBuf);
         void HandleLockReply(char *respBuf);
@@ -247,6 +256,7 @@ namespace mako
         void HandleWarmupReply(char *respBuf);
         void HandleLuigiDispatchReply(char *respBuf);
         void HandleOwdPingReply(char *respBuf);
+        void HandleLuigiStatusReply(char *respBuf);
         size_t ReceiveRequest(uint8_t reqType, char *reqBuf, char *respBuf) override { PPanic("Not implemented."); };
         bool Blocked() override { return blocked; };
         void SetNumResponseWaiting(int num_response_waiting) { this->num_response_waiting = num_response_waiting; };

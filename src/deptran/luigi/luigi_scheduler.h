@@ -179,6 +179,13 @@ class SchedulerLuigi : public SchedulerClassic {
   //==========================================================================
   std::map<uint32_t, LuigiLeaderProxy*> leader_proxies_;  // shard_id -> proxy
   std::mutex proxies_mutex_;
+  
+  //==========================================================================
+  // PENDING TXN TRACKING (for async status check)
+  // Tracks txn_ids from dispatch until completion callback.
+  //==========================================================================
+  std::unordered_set<uint64_t> pending_txns_;
+  mutable std::mutex pending_txns_mutex_;
 
  public:
   void SetPartitionId(uint32_t par_id) { 
@@ -187,6 +194,12 @@ class SchedulerLuigi : public SchedulerClassic {
   }
   uint32_t GetPartitionId() const { return partition_id_; }
   uint32_t partition_id() const { return partition_id_; }  // alias
+  
+  /**
+   * Check if a transaction is still pending (queued or executing).
+   * Used by async status check to distinguish QUEUED vs NOT_FOUND.
+   */
+  bool HasPendingTxn(uint64_t txn_id) const;
   
   //==========================================================================
   // CALLBACKS FOR DB OPERATIONS (set by Mako's ShardReceiver)

@@ -54,6 +54,11 @@ uint64_t SchedulerLuigi::GetMicrosecondTimestamp() {
   return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(tse).count();
 }
 
+bool SchedulerLuigi::HasPendingTxn(uint64_t txn_id) const {
+  std::lock_guard<std::mutex> lock(pending_txns_mutex_);
+  return pending_txns_.find(txn_id) != pending_txns_.end();
+}
+
 //=============================================================================
 // LuigiDispatchFromRequest: Entry Point from server.cc
 //
@@ -69,10 +74,28 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
     const std::vector<uint32_t>& involved_shards,
     std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb) {
   
+  // Track this txn as pending (for async status check)
+  {
+    std::lock_guard<std::mutex> lock(pending_txns_mutex_);
+    pending_txns_.insert(txn_id);
+  }
+  
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
   entry->proposed_ts_ = expected_time;  // Use expected_time directly as proposed timestamp
   entry->ops_ = ops;
-  entry->reply_cb_ = reply_cb;
+  
+  // Wrap callback to remove from pending when complete
+  entry->reply_cb_ = [this, txn_id, reply_cb](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
+    // Remove from pending set
+    {
+      std::lock_guard<std::mutex> lock(pending_txns_mutex_);
+      pending_txns_.erase(txn_id);
+    }
+    // Call original callback
+    if (reply_cb) {
+      reply_cb(status, commit_ts, read_results);
+    }
+  };
 
   // Populate remote_shards_ with OTHER shards (not ourselves)
   // This is used by IsMultiShard() to detect multi-shard transactions
@@ -298,6 +321,18 @@ void SchedulerLuigi::ExecTd() {
           // Execute() already called the callback
           break;
           
+        case LUIGI_AGREE_INIT:
+          // Multi-shard txn: InitiateAgreement() was called, RPCs sent.
+          // The txn is now waiting for async agreement completion.
+          // When all proposals arrive, UpdateDeadlineRecord() will:
+          //   - Determine Case 1/2/3
+          //   - Set agree_status_ appropriately
+          //   - Re-enqueue to ready_txn_queue_ if ready to execute
+          // Nothing to do here - just let it wait.
+          Log_debug("Luigi ExecTd: txn %lu waiting for agreement (INIT)",
+                   entry->tid_);
+          break;
+          
         case LUIGI_AGREE_FLUSHING:
           // Case 3: Need to reposition in priority queue
           // Execute() updated proposed_ts_ to agreed_ts_
@@ -309,12 +344,13 @@ void SchedulerLuigi::ExecTd() {
           
         case LUIGI_AGREE_CONFIRMING:
           // Case 2: Waiting for round 2 confirmations
-          // TODO: Register this entry to receive confirmation callbacks
-          // For now, we just log - actual confirmation handling needs RPC infra
-          Log_info("Luigi ExecTd: txn %lu waiting for confirmations (TBD)",
+          // The txn is waiting for phase-2 confirmations from smaller-ts shards.
+          // When all confirmations arrive, UpdateDeadlineRecord() will:
+          //   - Set agree_status_ to AGREE_COMPLETE
+          //   - Re-enqueue to ready_txn_queue_
+          // Nothing to do here - just let it wait.
+          Log_info("Luigi ExecTd: txn %lu waiting for phase-2 confirmations (Case 2)",
                    entry->tid_);
-          // The entry will be re-triggered when confirmations arrive
-          // TODO: Add to a "waiting for confirmation" map
           break;
           
         default:
