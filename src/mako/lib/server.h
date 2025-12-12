@@ -7,6 +7,8 @@
 #include <thread>
 #include <algorithm>
 #include <map>
+#include <unordered_map>
+#include <shared_mutex>
 #include "lib/fasttransport.h"
 #include "lib/timestamp.h"
 #include "lib/common.h"
@@ -70,8 +72,11 @@ namespace mako
         void HandleGetMicroMegaRequest(char *reqBuf, char *respBuf, size_t &respLen);
         void HandleBatchLockMicroMegaRequest(char *reqBuf, char *respBuf, size_t &respLen);
 
-        // Luigi (Tiga-style) handler
+        // Luigi (Tiga-style) handler - async: queues and returns QUEUED immediately
         void HandleLuigiDispatch(char *reqBuf, char *respBuf, size_t &respLen);
+        
+        // Luigi status check handler - poll for completion of async dispatch
+        void HandleLuigiStatusCheck(char *reqBuf, char *respBuf, size_t &respLen);
         
         // OWD ping handler for latency measurement
         void HandleOwdPing(char *reqBuf, char *respBuf, size_t &respLen);
@@ -106,6 +111,25 @@ namespace mako
         janus::SchedulerLuigi* luigi_scheduler_ = nullptr;
         janus::LuigiRpcSetup* luigi_rpc_setup_ = nullptr;
         uint32_t partition_id_ = 0;
+        
+        //=====================================================================
+        // Async Luigi: Store completed txn results for polling
+        //=====================================================================
+        struct LuigiTxnResult {
+            int status;                          // LUIGI_STATUS_*
+            uint64_t commit_timestamp;
+            std::vector<std::string> read_results;
+            std::chrono::steady_clock::time_point completion_time;
+        };
+        std::unordered_map<uint64_t, LuigiTxnResult> luigi_completed_txns_;
+        mutable std::shared_mutex luigi_results_mutex_;
+        
+        // Store result for later polling (called from scheduler callback)
+        void StoreLuigiResult(uint64_t txn_id, int status, uint64_t commit_ts,
+                              const std::vector<std::string>& read_results);
+        
+        // Cleanup old results (called periodically, removes results older than TTL)
+        void CleanupStaleLuigiResults(int ttl_seconds = 60);
 
     public:
         // Initialize and start Luigi scheduler
