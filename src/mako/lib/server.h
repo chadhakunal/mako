@@ -20,6 +20,7 @@
 namespace janus {
 class SchedulerLuigi;
 class LuigiRpcSetup;
+struct LuigiLogEntry;
 }
 
 // Forward declarations for rrr RPC
@@ -130,6 +131,9 @@ namespace mako
         
         // Cleanup old results (called periodically, removes results older than TTL)
         void CleanupStaleLuigiResults(int ttl_seconds = 60);
+        
+        // Replicate a Luigi entry to Paxos (called from executor)
+        bool ReplicateLuigiEntry(const std::shared_ptr<janus::LuigiLogEntry>& entry);
 
     public:
         // Initialize and start Luigi scheduler
