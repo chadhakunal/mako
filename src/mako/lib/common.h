@@ -181,6 +181,9 @@ namespace mako
     // Luigi: Tiga-style timestamp-ordered execution
     const uint8_t luigiDispatchReqType = 14;
     
+    // Luigi: OWD (One-Way Delay) ping for latency measurement
+    const uint8_t owdPingReqType = 15;
+    
     const size_t max_key_length = 64;
 #if defined(MEGA_BENCHMARK)
     const size_t max_value_length = 7000; // mega in new order 
@@ -270,6 +273,7 @@ namespace mako
     
     // Maximum number of key-value pairs in a Luigi dispatch
     const size_t luigi_max_ops = 32;
+    const size_t luigi_max_shards = 16;  // Max shards involved in one txn
     
     struct luigi_dispatch_request_t {
         uint16_t target_server_id;     // Target shard
@@ -277,6 +281,8 @@ namespace mako
         uint64_t txn_id;               // Unique transaction ID
         uint64_t expected_time;        // Timestamp at which transaction should execute
         uint16_t num_ops;              // Number of operations in this dispatch
+        uint16_t num_involved_shards;  // Number of shards involved in this txn (for agreement)
+        uint16_t involved_shards[luigi_max_shards];  // List of all involved shard IDs
         // Each op: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
         // op_type: 0=read, 1=write
         char ops_data[luigi_max_ops * (max_key_length + max_value_length + 8)];
@@ -294,6 +300,20 @@ namespace mako
     // Operation types for Luigi
     const uint8_t LUIGI_OP_READ = 0;
     const uint8_t LUIGI_OP_WRITE = 1;
+
+    //=========================================================================
+    // OWD Ping: Simple ping for measuring one-way delay
+    //=========================================================================
+    struct owd_ping_request_t {
+        uint16_t target_server_id;     // Target shard
+        uint32_t req_nr;               // Request number
+        uint64_t send_time;            // Timestamp when ping was sent (for debugging)
+    };
+
+    struct owd_ping_response_t {
+        uint32_t req_nr;               // Echo back request number
+        int status;                    // 0 = OK
+    };
 
     struct lock_request_t
     {

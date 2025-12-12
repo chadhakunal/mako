@@ -630,6 +630,13 @@ namespace mako
             );
         }
 
+        // IMPORTANT: Set involved_shards on ALL builders so each shard knows
+        // which other shards are participating in this multi-shard transaction.
+        // This is critical for leader agreement protocol.
+        for (auto& kv : requests_per_shard) {
+            kv.second->set_involved_shards(shard_order);
+        }
+
         // Set up waiting
         Promise promise(BASIC_TIMEOUT);
         waiting = &promise;
@@ -661,6 +668,33 @@ namespace mako
             out_read_results[shard_idx] = luigi_read_results_[i];
         }
 
+        return is_all_response_ok();
+    }
+
+    //=========================================================================
+    // OWD: Ping a single shard for latency measurement
+    //=========================================================================
+    int ShardClient::pingOneShard(int shard_idx) {
+        // Send ping to exactly one shard
+        uint64_t shard_bit = (1ULL << shard_idx);
+        calculate_num_response_waiting_no_skip(shard_bit);
+        
+        status_received.clear();
+        
+        Promise promise(BASIC_TIMEOUT);
+        waiting = &promise;
+        
+        client->InvokeOwdPing(
+            ++tid,
+            shard_idx,
+            bind(&ShardClient::SendToAllStatusCallBack, this, placeholders::_1),
+            bind(&ShardClient::SendToAllGiveUpTimeout, this),
+            BASIC_TIMEOUT
+        );
+        
+        promise.GetReply();
+        waiting = nullptr;
+        
         return is_all_response_ok();
     }
 }

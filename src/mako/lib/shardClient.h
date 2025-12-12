@@ -44,6 +44,9 @@ namespace mako
             std::map<int, uint64_t>& out_execute_timestamps,
             std::map<int, std::vector<std::string>>& out_read_results);
         
+        // OWD: Ping a single shard to measure round-trip time
+        int pingOneShard(int shard_idx);
+        
         void statistics();
         void stop();
         void setBreakTimeout(bool);

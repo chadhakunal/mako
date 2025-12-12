@@ -3824,6 +3824,10 @@ tpcc_do_test(abstract_db *db, int argc, char **argv, int run = 0, bench_runner *
   mako::setup_helper(
     db,
     open_tables_by_id);
+  
+  // Setup Luigi RPC for multi-shard agreement protocol (if Luigi mode enabled)
+  mako::setup_luigi_rpc();
+  
   r->f_mode=f_mode;
   auto x1 = std::chrono::high_resolution_clock::now() ;
   printf("start worker:%d\n",
@@ -3935,6 +3939,9 @@ tpcc_do_test(abstract_db *db, int argc, char **argv, int run, bench_runner *rc, 
       }
     }
     mako::setup_helper(db, open_tables_by_id);
+    
+    // Setup Luigi RPC for multi-shard agreement protocol (if Luigi mode enabled)
+    mako::setup_luigi_rpc();
   } else {
     Notice("Multi-shard mode: skipping RPC setup for shard %d (all shards local)", shard_index);
   }

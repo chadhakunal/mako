@@ -309,6 +309,30 @@ mako::HelperQueue* FastTransport::GetHelperQueueResponse(uint16_t id)
     return nullptr;
 }
 
+// Luigi RPC support: get RPC server (RrrRpcBackend only)
+rrr::Server* FastTransport::GetRpcServer()
+{
+    if (backend_ == nullptr) return nullptr;
+    
+    if (backend_->GetType() == mako::TransportType::RRR_RPC) {
+        auto* rrr_backend = static_cast<mako::RrrRpcBackend*>(backend_);
+        return rrr_backend->GetRpcServer();
+    }
+    return nullptr;
+}
+
+// Luigi RPC support: get poll thread (RrrRpcBackend only)
+rusty::Option<rusty::Arc<rrr::PollThread>> FastTransport::GetPollThread()
+{
+    if (backend_ == nullptr) return rusty::None;
+    
+    if (backend_->GetType() == mako::TransportType::RRR_RPC) {
+        auto* rrr_backend = static_cast<mako::RrrRpcBackend*>(backend_);
+        return rrr_backend->GetPollThread();
+    }
+    return rusty::None;
+}
+
 // ===== Timer Implementation (transport-independent) =====
 
 int FastTransport::Timer(uint64_t ms, timer_callback_t cb)

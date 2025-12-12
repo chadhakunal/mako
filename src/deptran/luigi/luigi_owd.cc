@@ -125,8 +125,8 @@ void LuigiOWD::pingShard(int shard_idx) {
     // Record start time
     auto start_time = std::chrono::steady_clock::now();
     
-    // Ping using warmup mechanism
-    int result = shard_client_->checkRemoteShardReady(shard_idx);
+    // Ping the single shard using dedicated OWD ping
+    int result = shard_client_->pingOneShard(shard_idx);
     
     // Record end time
     auto end_time = std::chrono::steady_clock::now();

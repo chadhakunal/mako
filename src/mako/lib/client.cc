@@ -83,6 +83,9 @@ namespace mako
         case luigiDispatchReqType:
             HandleLuigiDispatchReply(respBuf);
             break;
+        case owdPingReqType:
+            HandleOwdPingReply(respBuf);
+            break;
         default:
             Warning("Unrecognized request type: %d\n", reqType);
         }
@@ -939,6 +942,67 @@ namespace mako
         if (num_response_waiting) {
             num_response_waiting--;
         }
+        if (num_response_waiting == 0) {
+            blocked = false;
+            crtReqK.req_nr = 0;
+        }
+    }
+
+    void Client::InvokeOwdPing(uint64_t txn_nr,
+                               int dstShardIdx,
+                               resp_continuation_t continuation,
+                               error_continuation_t error_continuation,
+                               uint32_t timeout)
+    {
+        Debug("invoke InvokeOwdPing to shard %d\n", dstShardIdx);
+        uint32_t reqId = ++lastReqId;
+        reqId *= 10;
+
+        uint16_t server_id = 0;  // OWD ping doesn't need specific queue routing
+
+        crtReqK = PendingRequestK(
+            "owdPing",
+            reqId,
+            txn_nr,
+            server_id,
+            continuation,
+            error_continuation);
+
+        auto *reqBuf = reinterpret_cast<owd_ping_request_t *>(
+            transport->GetRequestBuf(
+                sizeof(owd_ping_request_t),
+                sizeof(owd_ping_response_t)));
+
+        reqBuf->target_server_id = server_id;
+        reqBuf->req_nr = reqId + current_term;
+        reqBuf->send_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        blocked = true;
+        transport->SendRequestToShard(this,
+                                      owdPingReqType,
+                                      dstShardIdx,
+                                      config.warehouses + 5,  // Use base queue
+                                      sizeof(owd_ping_request_t));
+    }
+
+    void Client::HandleOwdPingReply(char *respBuf)
+    {
+        auto *resp = reinterpret_cast<owd_ping_response_t *>(respBuf);
+        Debug("eRPC client receives OWD ping reply, req_nr: %d, crt: %d, status: %d\n",
+              resp->req_nr, crtReqK.req_nr, resp->status);
+
+        if (resp->req_nr != crtReqK.req_nr) {
+            Debug("Received OWD ping reply for wrong request; req_nr = %u, expected = %u",
+                  resp->req_nr, crtReqK.req_nr);
+            return;
+        }
+
+        // invoke application callback
+        crtReqK.resp_continuation(respBuf);
+
+        // remove from pending list
+        if (num_response_waiting) num_response_waiting--;
         if (num_response_waiting == 0) {
             blocked = false;
             crtReqK.req_nr = 0;

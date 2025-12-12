@@ -254,3 +254,70 @@ void mako::stop_erpc_server()
   }
   std::cerr << "[STOP_SERVER] All server transports stopped" << std::endl;
 }
+
+void mako::setup_luigi_rpc()
+{
+  auto &cfg = BenchmarkConfig::getInstance();
+  
+  // Only setup Luigi RPC if Luigi mode is enabled
+  if (!cfg.getUseLuigi()) {
+    return;
+  }
+  
+  auto &server_transports = cfg.getServerTransports();
+  if (server_transports.empty()) {
+    Notice("setup_luigi_rpc: No server transports available, skipping");
+    return;
+  }
+  
+  // Get RPC server and poll thread from the first transport
+  FastTransport* transport = server_transports[0];
+  if (!transport) {
+    Warning("setup_luigi_rpc: First transport is null");
+    return;
+  }
+  
+  rrr::Server* rpc_server = transport->GetRpcServer();
+  auto poll_thread_opt = transport->GetPollThread();
+  
+  if (!rpc_server) {
+    Notice("setup_luigi_rpc: No RPC server available (eRPC mode?), skipping");
+    return;
+  }
+  
+  if (poll_thread_opt.is_none()) {
+    Warning("setup_luigi_rpc: No poll thread available");
+    return;
+  }
+  
+  rusty::Arc<rrr::PollThread> poll_thread = poll_thread_opt.unwrap();
+  
+  // Build shard addresses map: shard_id -> "host:port"
+  std::map<uint32_t, std::string> shard_addresses;
+  transport::Configuration* config = cfg.getConfig();
+  if (config) {
+    std::string cluster = cfg.getCluster();
+    int cluster_role = mako::convertCluster(cluster);
+    
+    for (int shard_idx = 0; shard_idx < config->nshards; shard_idx++) {
+      // Skip our own shard
+      if (shard_idx == (int)cfg.getShardIndex()) {
+        continue;
+      }
+      
+      std::string host = config->shard(shard_idx, cluster_role).host;
+      std::string port = config->shard(shard_idx, cluster_role).port;
+      shard_addresses[shard_idx] = host + ":" + port;
+    }
+  }
+  
+  // Setup Luigi RPC for each helper server
+  {
+    std::lock_guard<std::mutex> lock(g_helper_mu);
+    for (auto* server : g_helper_servers) {
+      server->SetupLuigiRpc(rpc_server, poll_thread.clone(), shard_addresses);
+    }
+  }
+  
+  Notice("Luigi RPC setup complete: %zu shard addresses configured", shard_addresses.size());
+}

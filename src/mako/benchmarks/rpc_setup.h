@@ -37,6 +37,10 @@ void stop_erpc_server();
 // Initialize per thread
 void initialize_per_thread(abstract_db *db) ;
 
+// Setup Luigi RPC for multi-shard agreement protocol
+// Call this after both setup_erpc_server() and setup_helper() complete
+void setup_luigi_rpc();
+
 } // namespace mako
 
 #endif // MAKO_BENCHMARKS_RPC_SETUP_H
