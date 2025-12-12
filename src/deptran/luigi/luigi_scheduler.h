@@ -57,10 +57,12 @@ class SchedulerLuigi : public SchedulerClassic {
   // Entry point for a Luigi-style dispatch from raw request buffer.
   // This is called by server.cc's HandleLuigiDispatch.
   // Parses the request, creates a LuigiLogEntry, and enqueues it.
+  // involved_shards: list of ALL shard IDs involved in this multi-shard transaction
   void LuigiDispatchFromRequest(
       uint64_t txn_id,
       uint64_t expected_time,
       const std::vector<LuigiOp>& ops,
+      const std::vector<uint32_t>& involved_shards,
       std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb);
 
   // Original entry point (kept for compatibility with deptran-style calls)

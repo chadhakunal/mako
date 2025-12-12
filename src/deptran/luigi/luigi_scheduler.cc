@@ -58,18 +58,29 @@ uint64_t SchedulerLuigi::GetMicrosecondTimestamp() {
 // LuigiDispatchFromRequest: Entry Point from server.cc
 //
 // Creates a LuigiLogEntry from parsed request data and enqueues it.
+// involved_shards contains all shard IDs involved in this transaction,
+// which is critical for multi-shard leader agreement.
 //=============================================================================
 
 void SchedulerLuigi::LuigiDispatchFromRequest(
     uint64_t txn_id,
     uint64_t expected_time,
     const std::vector<LuigiOp>& ops,
+    const std::vector<uint32_t>& involved_shards,
     std::function<void(int status, uint64_t commit_ts, const std::vector<std::string>& read_results)> reply_cb) {
   
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
   entry->proposed_ts_ = expected_time;  // Use expected_time directly as proposed timestamp
   entry->ops_ = ops;
   entry->reply_cb_ = reply_cb;
+
+  // Populate remote_shards_ with OTHER shards (not ourselves)
+  // This is used by IsMultiShard() to detect multi-shard transactions
+  for (uint32_t shard_id : involved_shards) {
+    if (shard_id != partition_id_) {
+      entry->remote_shards_.push_back(shard_id);
+    }
+  }
 
   // Extract keys for conflict detection
   // We use a simple hash of (table_id, key) as the conflict key

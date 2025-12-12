@@ -23,6 +23,16 @@
 #include <list>
 #include <vector>
 #include <unordered_map>
+
+// Forward declarations for rrr RPC
+namespace rrr {
+class Server;
+class PollThread;
+}
+namespace rusty {
+template<typename T> class Arc;
+template<typename T> class Option;
+}
 #include <unordered_set>
 #include <random>
 #include <mutex>
@@ -99,6 +109,10 @@ public:
 
     mako::HelperQueue* GetHelperQueue(uint16_t id);
     mako::HelperQueue* GetHelperQueueResponse(uint16_t id);
+
+    // Luigi RPC support: access underlying RPC server (for RrrRpcBackend only)
+    rrr::Server* GetRpcServer();
+    rusty::Option<rusty::Arc<rrr::PollThread>> GetPollThread();
 
 private:
     // Transport backend (eRPC, rrr/rpc, etc.)

@@ -169,6 +169,16 @@ public:
         return queue_holders_response_;
     }
 
+    // Luigi RPC support: expose server and poll thread
+    rrr::Server* GetRpcServer() const { return server_; }
+    
+    rusty::Option<rusty::Arc<rrr::PollThread>> GetPollThread() const { 
+        if (poll_thread_worker_.is_some()) {
+            return rusty::Some(poll_thread_worker_.as_ref().unwrap().clone());
+        }
+        return rusty::None;
+    }
+
 private:
     // Configuration
     transport::Configuration config_;

@@ -22,6 +22,7 @@ namespace mako
         LuigiDispatchRequestBuilder() {
             request_ = new luigi_dispatch_request_t;
             request_->num_ops = 0;
+            request_->num_involved_shards = 0;
             data_ptr_ = request_->ops_data;
             msg_len_ = 0;
         }
@@ -38,6 +39,15 @@ namespace mako
 
         void set_req_nr(uint32_t req_nr) {
             request_->req_nr = req_nr;
+        }
+        
+        // Set the list of all shards involved in this transaction
+        // This is needed for multi-shard leader agreement
+        void set_involved_shards(const std::vector<int>& shards) {
+            request_->num_involved_shards = std::min(shards.size(), luigi_max_shards);
+            for (size_t i = 0; i < request_->num_involved_shards; i++) {
+                request_->involved_shards[i] = static_cast<uint16_t>(shards[i]);
+            }
         }
 
         void add_op(uint16_t table_id, uint8_t op_type, 
@@ -214,6 +224,14 @@ namespace mako
                             error_continuation_t error_continuation,
                             uint32_t timeout); 
 
+        // OWD: Ping a single shard for latency measurement
+        void InvokeOwdPing(
+            uint64_t txn_nr,
+            int dst_shard_idx,
+            resp_continuation_t continuation,
+            error_continuation_t error_continuation,
+            uint32_t timeout);
+
         void HandleGetReply(char *respBuf);
         void HandleScanReply(char *respBuf);
         void HandleLockReply(char *respBuf);
@@ -228,6 +246,7 @@ namespace mako
         void HandleWatermarkReply(char *respBuf);
         void HandleWarmupReply(char *respBuf);
         void HandleLuigiDispatchReply(char *respBuf);
+        void HandleOwdPingReply(char *respBuf);
         size_t ReceiveRequest(uint8_t reqType, char *reqBuf, char *respBuf) override { PPanic("Not implemented."); };
         bool Blocked() override { return blocked; };
         void SetNumResponseWaiting(int num_response_waiting) { this->num_response_waiting = num_response_waiting; };

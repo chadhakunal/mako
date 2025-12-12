@@ -209,6 +209,9 @@ namespace mako
         case luigiDispatchReqType:
             HandleLuigiDispatch(reqBuf, respBuf, respLen);
             break;
+        case owdPingReqType:
+            HandleOwdPing(reqBuf, respBuf, respLen);
+            break;
         default:
             Warning("Unrecognized rquest type: %d", reqType);
         }
@@ -701,6 +704,13 @@ namespace mako
         shardReceiver->UpdateTableEntry(table_id, table);
     }
 
+    void ShardServer::SetupLuigiRpc(rrr::Server* rpc_server,
+                                    rusty::Arc<rrr::PollThread> poll_thread,
+                                    const std::map<uint32_t, std::string>& shard_addresses)
+    {
+        shardReceiver->SetupLuigiRpc(rpc_server, poll_thread, shard_addresses);
+    }
+
     //=========================================================================
     // HandleLuigiDispatch: Luigi (Tiga-style) timestamp-ordered execution
     //
@@ -750,6 +760,12 @@ namespace mako
             ops.push_back(op);
         }
         
+        // Extract involved shards for multi-shard agreement
+        std::vector<uint32_t> involved_shards;
+        for (uint16_t i = 0; i < req->num_involved_shards && i < luigi_max_shards; i++) {
+            involved_shards.push_back(req->involved_shards[i]);
+        }
+        
         // Prepare response buffer
         auto *resp = reinterpret_cast<luigi_dispatch_response_t *>(respBuf);
         resp->req_nr = req->req_nr;
@@ -775,10 +791,12 @@ namespace mako
         
         // Dispatch to Luigi scheduler with completion callback
         // expected_time is the timestamp at which the transaction should execute
+        // involved_shards tells the scheduler which other shards are in this txn
         luigi_scheduler_->LuigiDispatchFromRequest(
             req->txn_id,
             req->expected_time,
             ops,
+            involved_shards,
             [&](int status, uint64_t commit_ts, const std::vector<std::string>& read_results) {
                 std::lock_guard<std::mutex> lock(completion_mutex);
                 result_status = status;
@@ -816,6 +834,24 @@ namespace mako
             memcpy(results_ptr, val.data(), vlen);
             results_ptr += vlen;
         }
+    }
+
+    //=========================================================================
+    // HandleOwdPing: Simple ping for One-Way Delay measurement
+    //
+    // This handler immediately responds to an OWD ping request.
+    // The client uses the round-trip time to estimate network latency.
+    //=========================================================================
+    void ShardReceiver::HandleOwdPing(char *reqBuf, char *respBuf, size_t &respLen)
+    {
+        auto *req = reinterpret_cast<owd_ping_request_t *>(reqBuf);
+        auto *resp = reinterpret_cast<owd_ping_response_t *>(respBuf);
+        
+        resp->req_nr = req->req_nr;
+        resp->status = MakoErrorCode::OK;
+        respLen = sizeof(owd_ping_response_t);
+        
+        Debug("OWD ping handled, req_nr: %u", req->req_nr);
     }
 
     void ShardServer::Run()

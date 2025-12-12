@@ -72,6 +72,9 @@ namespace mako
 
         // Luigi (Tiga-style) handler
         void HandleLuigiDispatch(char *reqBuf, char *respBuf, size_t &respLen);
+        
+        // OWD ping handler for latency measurement
+        void HandleOwdPing(char *reqBuf, char *respBuf, size_t &respLen);
 
     protected:
         inline void *txn_buf() { return (void *) txn_obj_buf.data(); }
@@ -133,6 +136,11 @@ namespace mako
                  const map<string, vector<abstract_ordered_index *>> &remote_partitions*/);
         void UpdateTable(int table_id, abstract_ordered_index *table);
         void Run();
+        
+        // Setup Luigi RPC for multi-shard agreement protocol
+        void SetupLuigiRpc(rrr::Server* rpc_server,
+                          rusty::Arc<rrr::PollThread> poll_thread,
+                          const std::map<uint32_t, std::string>& shard_addresses);
 
     protected:
         transport::Configuration config;
