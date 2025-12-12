@@ -96,12 +96,10 @@ namespace mako
             }
         );
         
-        // Replication callback - TODO: integrate with add_log_to_nc
+        // Replication callback - serialize Luigi entry and submit to Paxos
         luigi_scheduler_->SetReplicationCallback(
             [this](const std::shared_ptr<janus::LuigiLogEntry>& entry) -> bool {
-                // TODO: Serialize entry and call add_log_to_nc
-                // For now, just return success (replication not yet implemented)
-                return true;
+                return ReplicateLuigiEntry(entry);
             }
         );
         
@@ -923,6 +921,113 @@ namespace mako
                 ++it;
             }
         }
+    }
+
+    //=========================================================================
+    // ReplicateLuigiEntry: Serialize Luigi entry and submit to Paxos
+    //
+    // Log format (compatible with Mako's existing format):
+    //   [luigi_magic(4)] [txn_id(8)] [commit_ts(8)] [num_writes(2)]
+    //   For each write: [key_len(2)] [key] [val_len(2)] [val] [table_id(2)]
+    //   [checksum(4)]
+    //
+    // We only replicate writes (reads don't need replication).
+    //=========================================================================
+    bool ShardReceiver::ReplicateLuigiEntry(const std::shared_ptr<janus::LuigiLogEntry>& entry)
+    {
+        // Count writes first
+        uint16_t num_writes = 0;
+        for (const auto& op : entry->ops_) {
+            if (op.op_type == janus::LUIGI_OP_WRITE && op.executed) {
+                num_writes++;
+            }
+        }
+        
+        if (num_writes == 0) {
+            // Read-only transaction, no need to replicate
+            Debug("Luigi replication: txn %lu is read-only, skipping", entry->tid_);
+            return true;
+        }
+        
+        // Estimate buffer size needed
+        // Header: magic(4) + txn_id(8) + commit_ts(8) + num_writes(2) = 22
+        // Per write: key_len(2) + key + val_len(2) + val + table_id(2)
+        // Footer: checksum(4)
+        size_t estimated_size = 22 + 4;  // header + footer
+        for (const auto& op : entry->ops_) {
+            if (op.op_type == janus::LUIGI_OP_WRITE && op.executed) {
+                estimated_size += 2 + op.key.size() + 2 + op.value.size() + 2;
+            }
+        }
+        
+        // Allocate buffer
+        std::vector<char> buffer(estimated_size);
+        char* ptr = buffer.data();
+        
+        // Magic number to identify Luigi logs (for recovery differentiation)
+        constexpr uint32_t LUIGI_LOG_MAGIC = 0x4C554947;  // "LUIG"
+        memcpy(ptr, &LUIGI_LOG_MAGIC, sizeof(uint32_t));
+        ptr += sizeof(uint32_t);
+        
+        // Transaction ID
+        uint64_t txn_id = entry->tid_;
+        memcpy(ptr, &txn_id, sizeof(uint64_t));
+        ptr += sizeof(uint64_t);
+        
+        // Commit timestamp (agreed_ts for multi-shard, proposed_ts for single-shard)
+        uint64_t commit_ts = entry->agreed_ts_ > 0 ? entry->agreed_ts_ : entry->proposed_ts_;
+        memcpy(ptr, &commit_ts, sizeof(uint64_t));
+        ptr += sizeof(uint64_t);
+        
+        // Number of writes
+        memcpy(ptr, &num_writes, sizeof(uint16_t));
+        ptr += sizeof(uint16_t);
+        
+        // Serialize each write operation
+        for (const auto& op : entry->ops_) {
+            if (op.op_type != janus::LUIGI_OP_WRITE || !op.executed) {
+                continue;
+            }
+            
+            // Key length + key
+            uint16_t key_len = static_cast<uint16_t>(op.key.size());
+            memcpy(ptr, &key_len, sizeof(uint16_t));
+            ptr += sizeof(uint16_t);
+            memcpy(ptr, op.key.data(), key_len);
+            ptr += key_len;
+            
+            // Value length + value
+            uint16_t val_len = static_cast<uint16_t>(op.value.size());
+            memcpy(ptr, &val_len, sizeof(uint16_t));
+            ptr += sizeof(uint16_t);
+            memcpy(ptr, op.value.data(), val_len);
+            ptr += val_len;
+            
+            // Table ID
+            uint16_t table_id = op.table_id;
+            memcpy(ptr, &table_id, sizeof(uint16_t));
+            ptr += sizeof(uint16_t);
+        }
+        
+        // Simple checksum (XOR of all bytes)
+        uint32_t checksum = 0;
+        for (size_t i = 0; i < static_cast<size_t>(ptr - buffer.data()); i++) {
+            checksum ^= static_cast<uint32_t>(static_cast<uint8_t>(buffer[i])) << ((i % 4) * 8);
+        }
+        memcpy(ptr, &checksum, sizeof(uint32_t));
+        ptr += sizeof(uint32_t);
+        
+        // Calculate actual size
+        size_t actual_size = static_cast<size_t>(ptr - buffer.data());
+        
+        Debug("Luigi replication: txn %lu, commit_ts %lu, %u writes, %zu bytes",
+              txn_id, commit_ts, num_writes, actual_size);
+        
+        // Submit to Paxos via add_log_to_nc
+        // This is fire-and-forget - Paxos handles replication asynchronously
+        add_log_to_nc(buffer.data(), static_cast<int>(actual_size), partition_id_);
+        
+        return true;
     }
 
     //=========================================================================
