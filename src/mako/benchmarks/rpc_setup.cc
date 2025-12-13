@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <pthread.h>
 #include <unistd.h>
@@ -13,17 +14,35 @@
 #include "lib/fasttransport.h"
 #include "lib/server.h"
 #include "deptran/s_main.h"
+#include "deptran/luigi/luigi_scheduler.h"
+#include "deptran/luigi/luigi_entry.h"
 #include "benchmarks/sto/Interface.hh"
 #include "spinbarrier.h"
+
+#include "deptran/config.h"
 
 
 using namespace std;
 using namespace mako;
 
+namespace mako {
+
+// Local Luigi scheduler for single-shard mode (no helper servers needed)
+std::unique_ptr<janus::SchedulerLuigi> g_local_luigi_scheduler;
+bool g_local_luigi_scheduler_started = false;
+
+// (Removed duplicate definitions; only the mako namespace block at the top remains)
+
+} // end namespace mako
+
 namespace {
 
 std::mutex g_helper_mu;
 std::vector<mako::ShardServer *> g_helper_servers;
+
+} // end anonymous namespace
+std::map<int, abstract_ordered_index*> g_local_open_tables;
+abstract_db* g_local_db = nullptr;
 
 static inline size_t NumWarehouses() {
   return (size_t) BenchmarkConfig::getInstance().getScaleFactor();
@@ -317,7 +336,125 @@ void mako::setup_luigi_rpc()
     for (auto* server : g_helper_servers) {
       server->SetupLuigiRpc(rpc_server, poll_thread.clone(), shard_addresses);
     }
+    
+    // For single-shard mode, we don't need a full scheduler - transactions
+    // will be executed directly via local_luigi_execute()
+    if (g_helper_servers.empty() && cfg.getUseLuigi()) {
+      Notice("Single-shard Luigi mode: using direct local execution");
+    }
   }
   
   Notice("Luigi RPC setup complete: %zu shard addresses configured", shard_addresses.size());
+}
+
+//=========================================================================
+// Get Luigi scheduler for local dispatch (multi-shard mode only)
+// For single-shard mode, use local_luigi_execute() instead
+//=========================================================================
+janus::SchedulerLuigi* mako::get_local_luigi_scheduler() {
+  std::lock_guard<std::mutex> lock(g_helper_mu);
+  
+  // Only return scheduler from helper servers (multi-shard mode)
+  if (!g_helper_servers.empty()) {
+    return g_helper_servers[0]->GetLuigiScheduler();
+  }
+  
+  // For single-shard mode, return nullptr - use local_luigi_execute() instead
+  return nullptr;
+}
+
+//=========================================================================
+// Direct local Luigi execution for single-shard mode
+// Executes operations directly on local tables without scheduler overhead
+//=========================================================================
+int mako::local_luigi_execute(
+    const std::vector<janus::LuigiOp>& ops,
+    uint64_t expected_time,
+    uint64_t& out_commit_ts,
+    std::vector<std::string>& out_read_results) {
+  
+  std::lock_guard<std::mutex> lock(g_helper_mu);
+  
+  if (g_local_open_tables.empty()) {
+    return -1;  // Tables not registered
+  }
+  
+  if (g_local_db == nullptr) {
+    return -4;  // DB not registered
+  }
+  
+  out_read_results.clear();
+  out_commit_ts = expected_time;  // Use expected time as commit timestamp
+  
+  // Start STO transaction context (required for shard_put/shard_get)
+  g_local_db->shard_reset();
+  
+  // Execute operations in timestamp order
+  for (const auto& op : ops) {
+    auto it = g_local_open_tables.find(op.table_id);
+    if (it == g_local_open_tables.end() || it->second == nullptr) {
+      static bool logged = false;
+      if (!logged) {
+        fprintf(stderr, "[Luigi] Table %d not found in local_open_tables (size=%zu)\n",
+                op.table_id, g_local_open_tables.size());
+        logged = true;
+      }
+      g_local_db->shard_abort_txn(nullptr);
+      return -2;  // Table not found
+    }
+    
+    if (op.op_type == mako::LUIGI_OP_READ) {
+      std::string value;
+      bool found = it->second->shard_get(lcdf::Str(op.key), value);
+      out_read_results.push_back(found ? value : "");
+    } else if (op.op_type == mako::LUIGI_OP_WRITE) {
+      try {
+        it->second->shard_put(lcdf::Str(op.key), op.value);
+        out_read_results.push_back("");  // Empty for writes
+      } catch (...) {
+        static bool logged = false;
+        if (!logged) {
+          fprintf(stderr, "[Luigi] Write to table %d failed with exception\n", op.table_id);
+          logged = true;
+        }
+        g_local_db->shard_abort_txn(nullptr);
+        return -3;  // Write failed
+      }
+    }
+  }
+  
+  // Commit the transaction: validate, install at timestamp, unlock
+  int validate_status = g_local_db->shard_validate();
+  if (validate_status != 0) {
+    g_local_db->shard_abort_txn(nullptr);
+    return -5;  // Validation failed
+  }
+  
+  g_local_db->shard_install((uint32_t)out_commit_ts);
+  g_local_db->shard_serialize_util((uint32_t)out_commit_ts);
+  g_local_db->shard_unlock(true);
+  
+  return 0;  // Success
+}
+
+//=========================================================================
+// Register tables with local Luigi scheduler (for single-shard mode)
+//=========================================================================
+void mako::setup_luigi_tables(const std::map<int, abstract_ordered_index*>& open_tables, abstract_db* db) {
+  std::lock_guard<std::mutex> lock(g_helper_mu);
+  g_local_open_tables = open_tables;
+  g_local_db = db;
+  Notice("Registered %zu tables with local Luigi scheduler", open_tables.size());
+}
+
+//=========================================================================
+// Stop local Luigi scheduler
+//=========================================================================
+void mako::stop_local_luigi() {
+  std::lock_guard<std::mutex> lock(g_helper_mu);
+  if (g_local_luigi_scheduler) {
+    g_local_luigi_scheduler->Stop();
+    g_local_luigi_scheduler.reset();
+    Notice("Local Luigi scheduler stopped");
+  }
 }

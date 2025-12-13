@@ -47,6 +47,26 @@ Config * Config::GetConfig() {
   return config_s;
 }
 
+// Create a minimal config for mako standalone use (without full deptran setup)
+void Config::CreateMinimalConfig() {
+  if (config_s != nullptr) return;  // Already created
+  
+  config_s = new Config();
+  config_s->logging_path_ = "";  // Disable logging (do_logging() checks this)
+  config_s->proc_name_ = "mako";
+  config_s->duration_ = 30;
+  config_s->n_concurrent_ = 1;
+  config_s->single_server_ = SS_DISABLED;
+  config_s->batch_start_ = false;
+  config_s->early_return_ = false;
+  config_s->retry_wait_ = false;
+  config_s->replica_proto_ = 0;
+  config_s->tx_proto_ = 0;
+  config_s->max_retry_ = 3;
+  config_s->scale_factor_ = 1;
+  Log_info("Created minimal deptran Config for mako/Luigi");
+}
+
 int Config::CreateConfig(int argc, char **argv) {
   if (config_s != NULL) return -1;
 

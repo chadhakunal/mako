@@ -4,12 +4,28 @@
 #include <atomic>
 #include <array>
 #include <iostream>
+#include <mutex>
+#include <condition_variable>
 #include "MassTrans.hh"
 #include "deptran/s_main.h"
 #include "benchmarks/sto/sync_util.hh"
 #include "lib/common.h"
 #include "benchmarks/benchmark_config.h"
 #include "deptran/luigi/luigi_owd.h"
+#include "deptran/luigi/luigi_scheduler.h"
+#include "deptran/luigi/luigi_entry.h"
+#include "mako/benchmarks/rpc_setup.h"
+
+// Forward declarations to avoid allocator conflict from rpc_setup.h
+namespace janus { class SchedulerLuigi; struct LuigiOp; }
+namespace mako { 
+    janus::SchedulerLuigi* get_local_luigi_scheduler();
+    int local_luigi_execute(
+        const std::vector<janus::LuigiOp>& ops,
+        uint64_t expected_time,
+        uint64_t& out_commit_ts,
+        std::vector<std::string>& out_read_results);
+}
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -636,7 +652,7 @@ abort:
 // Instead of OCC's lock-validate-install, we:
 // 1. Collect all operations (reads + writes)
 // 2. Get expected timestamp
-// 3. Send transaction to all involved shards
+// 3. Send transaction to all involved shards (or local dispatch for single-shard)
 // 4. Wait for responses with commit timestamps
 // 5. Check timestamp consensus across shards
 bool Transaction::try_commit_luigi() {
@@ -647,6 +663,12 @@ bool Transaction::try_commit_luigi() {
     assert(state_ == s_in_progress || state_ >= s_aborted);
     if (state_ >= s_aborted)
         return state_ > s_aborted;
+
+    // For loaders (no ShardClient), use regular OCC commit path
+    // Loaders only do local writes during initial data loading
+    if (TThread::sclient == nullptr) {
+        return try_commit(true);  // true = no_paxos (local commit only)
+    }
 
     // Read-only transactions with opacity can commit immediately
     if (!any_writes_ && !any_nonopaque_) {
@@ -716,18 +738,59 @@ bool Transaction::try_commit_luigi() {
     // Output maps for results
     std::map<int, uint64_t> execute_timestamps;
     std::map<int, std::vector<std::string>> read_results;
-
-    // Send to all involved shards and wait for responses
-    int status = TThread::sclient->remoteLuigiDispatch(
-        txn_id,
-        expected_time,
-        table_ids,
-        op_types,
-        keys,
-        values,
-        execute_timestamps,
-        read_results
-    );
+    
+    int status = 0;
+    
+    //=========================================================================
+    // Single-shard mode: Queue in local Luigi scheduler (protocol-accurate)
+    //=========================================================================
+    if (TThread::get_nshards() == 1) {
+        // Build LuigiOp vector
+        std::vector<janus::LuigiOp> ops;
+        for (size_t i = 0; i < table_ids.size(); ++i) {
+            janus::LuigiOp op;
+            op.table_id = table_ids[i];
+            op.op_type = op_types[i];
+            op.key = keys[i];
+            op.value = values[i];
+            ops.push_back(op);
+        }
+        // Get local Luigi scheduler
+        janus::SchedulerLuigi* sched = mako::get_local_luigi_scheduler();
+        if (!sched) {
+            fprintf(stderr, "[ERROR] Local Luigi scheduler not initialized!\n");
+            stop(false, nullptr, 0);
+            return false;
+        }
+        // Create LuigiLogEntry
+        auto entry = std::make_shared<janus::LuigiLogEntry>(txn_id, expected_time, ops);
+        // Enqueue and wait for completion
+        sched->Enqueue(entry);
+        entry->WaitDone();
+        if (!entry->committed) {
+            TXP_INCREMENT(txp_commit_time_aborts);
+            stop(false, nullptr, 0);
+            return false;
+        }
+        tid_unique_ = static_cast<uint32_t>(entry->commit_ts);
+        stop(true, nullptr, 0);
+        return true;
+    }
+    //=========================================================================
+    // Multi-shard mode: RPC dispatch to remote shards
+    //=========================================================================
+    else {
+        status = TThread::sclient->remoteLuigiDispatch(
+            txn_id,
+            expected_time,
+            table_ids,
+            op_types,
+            keys,
+            values,
+            execute_timestamps,
+            read_results
+        );
+    }
 
     if (status != 0) {
         // Dispatch failed

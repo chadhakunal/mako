@@ -23,6 +23,7 @@
 #include "deptran/luigi/luigi_entry.h"
 #include "deptran/luigi/luigi_scheduler.h"
 #include "deptran/luigi/luigi_rpc_setup.h"
+#include "deptran/config.h"  // For Config::CreateMinimalConfig
 
 // rrr RPC framework (for Luigi leader agreement)
 #include "rrr/rrr.hpp"
@@ -66,6 +67,10 @@ namespace mako
             return;  // Already initialized
         }
         partition_id_ = partition_id;
+        
+        // Ensure minimal deptran Config exists (needed by SchedulerLuigi's TxLogServer base)
+        janus::Config::CreateMinimalConfig();
+        
         luigi_scheduler_ = new janus::SchedulerLuigi();
         luigi_scheduler_->SetPartitionId(partition_id);
         
