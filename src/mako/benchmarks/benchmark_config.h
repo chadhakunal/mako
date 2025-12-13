@@ -310,6 +310,10 @@ class BenchmarkConfig {
 
       // Signal this shard is ready by creating a ready file
       void signalShardReady(int shard_idx) {
+          // Ensure directory exists (needed for multi-process mode where
+          // initMultiShardBarrier() might not be called)
+          std::filesystem::create_directories(nfs_sync_dir_);
+
           std::string ready_file = getShardReadyFilePath(shard_idx);
           std::ofstream ofs(ready_file);
           ofs << "ready" << std::endl;

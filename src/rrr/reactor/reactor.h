@@ -108,9 +108,17 @@ class Reactor {
   // Returns thread-local reactor instance with single-threaded Rc
   // SAFETY: Thread-local storage, single-threaded access only
   static rusty::Rc<Reactor> GetReactor();
+  static rusty::Rc<Reactor> GetDiskReactor();
   static thread_local rusty::Option<rusty::Rc<Reactor>> sp_reactor_th_;
+  static thread_local rusty::Option<rusty::Rc<Reactor>> sp_disk_reactor_th_;
   // Thread-local current coroutine with single-threaded Rc
   static thread_local rusty::Option<rusty::Rc<Coroutine>> sp_running_coro_th_;
+
+  // Jetpack: Server ID for logging/debugging (set by server_worker.cc)
+  mutable int server_id_{0};
+
+  // Thread-safe ready events queue for multi-threaded Raft
+  mutable std::mutex ready_events_mutex_;
   /**
    * A reactor needs to keep reference to all coroutines created,
    * in case it is freed by the caller after a yield.
@@ -119,13 +127,37 @@ class Reactor {
   // Interior mutability for const methods
   mutable std::list<std::shared_ptr<Event>> all_events_{};
   mutable std::list<std::shared_ptr<Event>> waiting_events_{};
+  mutable std::vector<std::shared_ptr<Event>> ready_events_{};  // Thread-safe ready events for Raft
+  mutable std::list<std::shared_ptr<Event>> timeout_events_{};
+  mutable std::list<std::shared_ptr<Event>> composite_events_{}; // AndEvent, OrEvent, QuorumEvent - polled separately
+  // Disk events for async I/O
+  mutable std::vector<std::shared_ptr<Event>> disk_events_{};
+  mutable std::list<std::shared_ptr<Event>> ready_disk_events_{};
+  mutable std::vector<std::shared_ptr<Event>> network_events_{};
+  mutable std::list<std::shared_ptr<Event>> ready_network_events_{};
   // Coroutines managed with single-threaded Rc
   mutable std::set<rusty::Rc<Coroutine>> coros_{};
   mutable std::vector<rusty::Rc<Coroutine>> available_coros_{};
   mutable std::unordered_map<uint64_t, std::function<void(Event&)>> processors_{};
-  mutable std::list<std::shared_ptr<Event>> timeout_events_{};
+  mutable std::unordered_map<std::string, FILE*> opened_files_{};
+  static thread_local std::unordered_map<std::string, std::vector<rusty::Arc<rrr::Pollable>>> clients_;
+  static thread_local std::unordered_set<std::string> dangling_ips_;
   mutable bool looping_{false};
+  mutable bool slow_{false};
+  mutable long disk_times[50];
+  mutable int disk_count{0};
+  mutable int disk_index{0};
+  mutable int slow_count{0};
+  mutable int trying_count{0};
   std::thread::id thread_id_{};
+  // Jetpack coroutine counters - mutable for access through const Rc<Reactor>
+  mutable int64_t n_created_coroutines_{0};
+  mutable int64_t n_busy_coroutines_{0};
+  mutable int64_t n_active_coroutines_{0};
+  mutable int64_t n_active_coroutines_2_{0};
+  mutable int64_t n_idle_coroutines_{0};
+  static SpinLock disk_job_;
+	static SpinLock trying_job_;
 #ifdef REUSE_CORO
 #define REUSING_CORO (true)
 #else
@@ -138,11 +170,18 @@ class Reactor {
    * @param ev. is usually allocated on coroutine stack. memory managed by user.
    */
   // Creates and runs a new coroutine with rusty::Rc ownership
-  rusty::Rc<Coroutine> CreateRunCoroutine(rusty::Function<void()> func) const;
-  // Main event loop
-  void Loop(bool infinite = false) const;
+  // Jetpack: file/line parameters for debugging coroutine creation location
+  rusty::Rc<Coroutine> CreateRunCoroutine(rusty::Function<void()> func,
+                                          const char* file = "",
+                                          int64_t line = 0) const;
+  // Main event loop - check_timeout parameter for flexibility (Jetpack)
+  void Loop(bool infinite = false, bool check_timeout = true) const;
+  void DiskLoop() const;
   // Continues execution of a paused coroutine with rusty::Rc
   void ContinueCoro(rusty::Rc<Coroutine> sp_coro) const;
+  void Recycle(rusty::Rc<Coroutine>& sp_coro) const;
+  void DisplayWaitingEv() const;
+  void ReadyEventsThreadSafePushBack(std::shared_ptr<Event> ev) const;
 
   ~Reactor() {
     Log_debug("[Reactor::~Reactor] Starting destruction, all_events_.size()=%zu, coros_.size()=%zu",
@@ -167,6 +206,7 @@ class Reactor {
     // Rc gives const access, use const_cast for mutation (safe: thread-local, single owner)
     auto& events = const_cast<Reactor&>(*reactor).all_events_;
     events.push_back(sp_ev);
+    //Log_info("ADDING %s %d", typeid(sp_ev).name(), events.size());
     return sp_ev;
   }
 

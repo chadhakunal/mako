@@ -109,10 +109,11 @@ class OneTimeJob : public Job {
   OneTimeJob(std::function<void()> func) : func_(func) {
   }
   bool done_{false};
+  bool ready_{true};
   std::function<void()> func_{};
   // @safe
   bool Ready() override {
-    return true;
+    return ready_;
   }
   // @safe
   bool Done() override {
@@ -121,6 +122,7 @@ class OneTimeJob : public Job {
   // @unsafe - Calls std::function::operator() (external unsafe)
   // SAFETY: Executes user-provided function, caller ensures validity
   void Work() override {
+    ready_ = false;
     func_();
     done_ = true;
   }

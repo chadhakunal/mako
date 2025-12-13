@@ -41,7 +41,7 @@ TEST_F(ExtendedReactorTest, EventTimeout) {
     // Run coroutine that waits for event with timeout
     std::atomic<bool> completed{false};
     reactor->CreateRunCoroutine([sp_event, &completed]() {
-        sp_event->Wait(200000); // Wait with 200ms timeout
+        sp_event->Wait(); // Timeout already specified in constructor (100ms)
         completed = true;
     });
     

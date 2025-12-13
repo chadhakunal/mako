@@ -11,6 +11,7 @@
 #include <netinet/tcp.h>
 
 #include "reactor/coroutine.h"
+#include "reactor/reactor.h"
 #include "server.hpp"
 #include "utils.hpp"
 
@@ -115,7 +116,6 @@ ServerConnection::ServerConnection(Server* server, int socket)
         : server_(server), socket_(socket), status_(CONNECTED) {
     // increase number of open connections
     server_->sconns_ctr_.next(1);
-    block_read_in.init_block_read(100000000);
 }
 
 // @safe - Updates connection counter
@@ -170,9 +170,9 @@ void ServerConnection::end_reply() {
 
 // @unsafe - Reads requests and dispatches to handlers
 // SAFETY: Creates coroutines for concurrent handling
-void ServerConnection::handle_read() {
+bool ServerConnection::handle_read() {
     if (status_ == CLOSED) {
-        return;
+        return false;
     }
 
     // CRITICAL FIX: With edge-triggered epoll (EPOLLET), we must:
@@ -182,13 +182,15 @@ void ServerConnection::handle_read() {
     // causing hangs when multiple requests arrive together.
 
     // First, read all available data from the socket into the buffer
-    in_.read_from_fd(socket_);
-
-    if (in_.content_size() == 0) {
-        return;
+    size_t bytes_read = in_.read_from_fd(socket_);
+    if (bytes_read == 0 && in_.content_size() < sizeof(i32)) {
+        // Connection made no forward progress and there isn't enough buffered
+        // data to decode a packet header yet. Mirror legacy behavior by
+        // deferring until we either read more bytes or the peer closes.
+        return false;
     }
 
-    list<rusty::Box<Request>> complete_requests;
+    std::list<rusty::Box<Request>> complete_requests;
 
     // Process ALL complete packets in the buffer
     for (;;) {
@@ -216,13 +218,10 @@ void ServerConnection::handle_read() {
     stat_server_batching(complete_requests.size());
 #endif // RPC_STATISTICS
 
-    for (auto& req: complete_requests) {
-
+    for (auto& req : complete_requests) {
         if (req->m.content_size() < sizeof(i32)) {
-            // rpc id not provided
             begin_reply(*req, EINVAL);
             end_reply();
-            // req automatically cleaned up by rusty::Box
             continue;
         }
 
@@ -238,17 +237,10 @@ void ServerConnection::handle_read() {
             // rusty::Function allows direct capture of move-only types like rusty::Box
             // Lambda captures rusty::Box<Request> by move, maintaining single ownership semantics
             auto weak_this = weak_self_;
-            Coroutine::CreateRun([it, req = std::move(req), weak_this] () mutable {
-                // Move rusty::Box to handler, transferring ownership
-                it->second(std::move(req), weak_this);
-
-                // Upgrade weak reference to access block_read_in
-                auto sconn_opt = weak_this.upgrade();
-                if (sconn_opt.is_some()) {
-                    auto sconn = sconn_opt.unwrap();
-                    const_cast<ServerConnection&>(*sconn).block_read_in.reset();
-                }
-            });
+            // Jetpack: pass file/line for debugging; mako-dev block_read_in not used in this branch
+            Coroutine::CreateRun([handler = it->second, req = std::move(req), weak_this]() mutable {
+                handler(std::move(req), weak_this);
+            }, __FILE__, __LINE__);
         } else {
             // Track missing RPC IDs and suppress duplicate warnings
             rpc_id_missing_l_s.lock();
@@ -260,13 +252,17 @@ void ServerConnection::handle_read() {
             }
             rpc_id_missing_l_s.unlock();
             if (!surpress_warning) {
-                Log_error("rrr::ServerConnection: no handler for rpc_id=0x%08x", rpc_id);
+                Log_warn("rrr::ServerConnection: no handler for rpc_id = %d", rpc_id);
             }
             begin_reply(*req, ENOENT);
             end_reply();
-            // req automatically cleaned up by rusty::Box
         }
     }
+
+    // Pump reactor after processing batch
+    Reactor::GetReactor()->Loop();
+
+    return false;
 }
 
 // @unsafe - Writes buffered data to socket
@@ -487,7 +483,7 @@ void Server::server_loop(struct addrinfo* svr_addr) {
 // @unsafe - Accepts new client connections
 // @unsafe - Calls unsafe Log::debug for connection logging
 // SAFETY: Thread-safe with server connection lock
-void ServerListener::handle_read() {
+bool ServerListener::handle_read() {
 //  fd_set fds;
 //  FD_ZERO(&fds);
 //  FD_SET(server_sock_, &fds);
@@ -514,6 +510,7 @@ void ServerListener::handle_read() {
       break;
     }
   }
+  return false;
 }
 
 // @safe - Closes server socket using safe external annotation

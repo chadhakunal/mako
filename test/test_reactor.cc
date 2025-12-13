@@ -49,13 +49,28 @@ public:
         // }
     }
 
+    // Required by Pollable interface
+    size_t content_size() override {
+        return 0;  // Test implementation
+    }
+
     // @unsafe - Uses mutable field
-    void handle_read() override {
+    bool handle_read() override {
         // @unsafe {
         if (read_handler_) {
             read_handler_();
         }
         // }
+        return true;
+    }
+
+    // Required by Pollable interface - break handle_read into two halves
+    bool handle_read_one() override {
+        return true;  // Test implementation
+    }
+
+    bool handle_read_two() override {
+        return true;  // Test implementation
     }
 
     // @unsafe - Uses mutable field

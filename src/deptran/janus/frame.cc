@@ -9,10 +9,11 @@
 #include "coordinator.h"
 #include "scheduler.h"
 #include "tx.h"
+#include "../troad/troad.h"
 
 namespace janus {
 
-REG_FRAME(MODE_JANUS, vector<string>({"brq","baroque","janus"}), JanusFrame);
+REG_FRAME(MODE_JANUS, vector<string>({"brq","baroque","janus"}), TroadJanusFrame);
 
 Coordinator *JanusFrame::CreateCoordinator(cooid_t coo_id,
                                            Config *config,
@@ -21,7 +22,7 @@ Coordinator *JanusFrame::CreateCoordinator(cooid_t coo_id,
                                            uint32_t id,
                                            shared_ptr<TxnRegistry> txn_reg) {
   verify(config != nullptr);
-  CoordinatorJanus *coord = new CoordinatorJanus(coo_id,
+  auto *coord = new CoordinatorJanus(coo_id,
                                      benchmark,
                                      ccsi,
                                      id);

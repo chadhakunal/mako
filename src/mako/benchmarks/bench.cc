@@ -477,8 +477,12 @@ bench_runner::run()
 
     if (cfg.getIsReplicated()) {
       std::string log(mako::ADVANCER_MARKER_NUM, 'a');
-      for(int i=0;i<BenchmarkConfig::getInstance().getNthreads();i++)
+      std::cout << "[ADVANCER-SEND] Leader sending ADVANCER_MARKER to "
+                << BenchmarkConfig::getInstance().getNthreads() << " partitions" << std::endl;
+      for(int i=0;i<BenchmarkConfig::getInstance().getNthreads();i++) {
         add_log_to_nc(log.c_str(), log.size(), i); // notify others start a advancer
+        std::cout << "[ADVANCER-SEND] Sent ADVANCER_MARKER to partition " << i << std::endl;
+      }
     }
   }
   const vector<bench_worker *> workers = make_workers();

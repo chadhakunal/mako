@@ -14,7 +14,11 @@
 #include "../util.h"
 #include "../spinbarrier.h"
 #include "../rcu.h"
+#ifdef MAKO_USE_RAFT
+#include "deptran/raft_main_helper.h"
+#else
 #include "deptran/s_main.h"
+#endif
 #include "lib/configuration.h"
 #include "benchmark_config.h"
 

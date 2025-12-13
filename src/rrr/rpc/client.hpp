@@ -4,6 +4,7 @@
 #include <rusty/cell.hpp>
 
 #include <unordered_map>
+#include <chrono>
 #include <mutex>
 
 #include "misc/marshal.hpp"
@@ -67,6 +68,7 @@ class Future { // @unsafe
     FutureAttr attr_;
     rusty::UnsafeCell<Marshal> reply_;  // UnsafeCell for interior mutability in unsafe class
 
+    uint64_t timeout_{1000000}; // default timeout 1s (jetpack)
     rusty::Mutex<State> state_;  // Mutex provides its own interior mutability
     rusty::UnsafeCell<rusty::Condvar> ready_cond_;  // UnsafeCell for Condvar
     rusty::UnsafeCell<std::mutex> condvar_m_;  // UnsafeCell for std::mutex
@@ -124,10 +126,53 @@ public:
         return *reply_.get();
     }
 
-    // @unsafe - Calls unsafe wait()
+    // @unsafe - Calls unsafe wait() with optional timeout
     i32 get_error_code() const {
-        wait();
+        if (timeout_ > 0) {
+            double x = timeout_;
+            x = x / 1000000;
+            timed_wait(x);
+        } else {
+            wait();
+        }
         return error_code_.get();
+    }
+
+    i64 get_xid() const {
+        return xid_;
+    }
+
+    // =========================================================================
+    // Compatibility shim for legacy code that calls Future::safe_release()
+    // =========================================================================
+    // With rusty::Arc, manual release is no longer needed - Arc automatically
+    // cleans up when the last reference goes out of scope. These are NO-OP
+    // functions that exist solely for backward compatibility with existing
+    // call sites (raft/macros.h, fpga_raft/commo.cc, paxos/commo.cc, etc.)
+    //
+    // Old pattern (raw pointer):
+    //   Future* fu = proxy->async_Something(fuattr);
+    //   Future::safe_release(fu);  // Manual cleanup required
+    //
+    // New pattern (Arc):
+    //   auto fu = proxy->async_Something(fuattr);
+    //   // No cleanup needed - Arc handles it automatically when fu goes out of scope
+    //   Future::safe_release(fu);  // NO-OP, just for compatibility
+    // =========================================================================
+
+    // NO-OP: Arc automatically releases when dropped
+    static inline void safe_release(rusty::Arc<Future> fu) {
+        (void)fu;  // Intentionally empty - Arc handles cleanup
+    }
+
+    // NO-OP: Legacy overload for any remaining raw pointer usage in old code paths
+    static inline void safe_release(Future* fu) {
+        (void)fu;  // Intentionally empty - should not be called in new code
+    }
+
+    // NO-OP: Overload for FutureResult (Result<Arc<Future>, i32>) - jetpack compatibility
+    static inline void safe_release(FutureResult fu_result) {
+        (void)fu_result;  // Intentionally empty - Arc handles cleanup
     }
 };
 
@@ -168,6 +213,7 @@ public:
 class Client: public Pollable {
     rusty::RefCell<Marshal> in_;
     rusty::RefCell<Marshal> out_;
+    uint64_t cnt_{0};  // jetpack counter
 
     /**
      * Shared Arc to PollThread - thread-safe access
@@ -179,18 +225,31 @@ class Client: public Pollable {
     rusty::RefCell<rusty::sync::Weak<Client>> weak_self_;
 
     // Interior mutability for use with Arc (const methods need to modify state)
+    std::string host_;  // jetpack
     rusty::Cell<int> sock_;
+    long times[100];    // jetpack timing
+    long total_time{0}; // jetpack timing
+    int index{0};       // jetpack timing
+    int count_{0};      // jetpack timing
+    struct timespec begin;  // jetpack timing
     enum {
         NEW, CONNECTED, CLOSED
     };
     rusty::Cell<int> status_;
 
+    // Jetpack-specific members (mutable for const access through Arc)
+    mutable uint64_t packets{0};
+    mutable bool clean{false};
+    mutable bool paused_{false};
+
     rusty::RefCell<rusty::Option<rusty::Box<Marshal::bookmark>>> bmark_;
 
     rusty::RefCell<Counter> xid_counter_;
     rusty::RefCell<std::unordered_map<i64, rusty::Arc<Future>>> pending_fu_;
+    std::unordered_map<i64, struct timespec> rpc_starts;  // jetpack timing
 
     rusty::UnsafeCell<SpinLock> pending_fu_l_;
+    rusty::UnsafeCell<SpinLock> read_l_;  // jetpack
     rusty::UnsafeCell<SpinLock> out_l_;
 
     // @unsafe - Cancels all pending futures
@@ -198,13 +257,19 @@ class Client: public Pollable {
     void invalidate_pending_futures() const;
 
 public:
+    // Jetpack-specific public members
+    // Marked mutable for modification through Arc (const access)
+	 mutable bool client_;
+	 mutable long time_;
+    mutable uint64_t timeout_{0};
+	 mutable int count;
+	 mutable i32 rpc_id_;
 
     // @unsafe - Cleanup destructor
     // SAFETY: Ensures all futures are invalidated
-    virtual ~Client() {
-        invalidate_pending_futures();
-    }
-
+   virtual ~Client() {
+     invalidate_pending_futures();
+   }
 
     Client(rusty::Arc<PollThread> poll_thread_worker):
         in_(),              // Default-constructs RefCell<Marshal>
@@ -274,31 +339,48 @@ public:
         return *this;
     }
 
+    void set_valid(bool valid);
     // @unsafe - Establishes TCP connection
     // SAFETY: Proper socket creation and cleanup on failure
-    int connect(const char* addr) const;
+    int connect(const char* addr, bool client = true) const;
+
+    void pause() const;
+    void resume() const;
 
     // reentrant, could be called multiple times
     // @unsafe - Closes socket and cleans up
     // SAFETY: Idempotent, properly invalidates futures
     void close() const;
 
-    int fd() const {
+    // Jetpack compatibility wrapper
+    void close_and_release() {
+        close();
+    }
+
+    int fd() const override {
         return sock_.get();
+    }
+
+    std::string host() const {
+        return host_;
     }
 
     // @unsafe - Returns current poll mode based on output buffer
     // SAFETY: Uses RefCell borrow operations
-    int poll_mode() const;
+    int poll_mode() const override;
     // @unsafe - Processes incoming data
     // SAFETY: Protected by spinlock for pending futures
-    void handle_read();
+    size_t content_size();
+    bool handle_read_one();
+    bool handle_read_two();
+    bool handle_read();
     // @unsafe - Sends buffered data
     // SAFETY: Protected by output spinlock
     // Returns new poll mode, or MODE_NO_CHANGE if no update needed
     int handle_write() override;
     // @unsafe - Error handler that closes connection
     void handle_error();
+    void handle_free(i64 xid) const;
 
 };
 

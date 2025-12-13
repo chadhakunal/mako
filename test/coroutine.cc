@@ -219,12 +219,12 @@ TEST(CoroutineTest, wait_die_lock) {
 
 TEST(CoroutineTest, timeout) {
   auto coro1 = Coroutine::CreateRun([](){
-    auto t1 = Time::now();
+    auto t1 = Time::now(true);
     auto timeout = 1 * 1000000;
     auto sp_e = Reactor::CreateSpEvent<TimeoutEvent>(timeout);
     Log_debug("set timeout, start wait");
     sp_e->Wait();
-    auto t2 = Time::now();
+    auto t2 = Time::now(true);
     ASSERT_GT(t2, t1 + timeout);
     Log_debug("end timeout, end wait");
     Reactor::GetReactor()->looping_ = false;
@@ -235,12 +235,12 @@ TEST(CoroutineTest, timeout) {
 TEST(CoroutineTest, orevent) {
   auto inte = Reactor::CreateSpEvent<IntEvent>();
   auto coro1 = Coroutine::CreateRun([&inte](){
-    auto t1 = Time::now();
+    auto t1 = Time::now(true);
     auto timeout = 10 * 1000000;
     auto sp_e1 = Reactor::CreateSpEvent<TimeoutEvent>(timeout);
     auto sp_e2 = Reactor::CreateSpEvent<OrEvent>(sp_e1, inte);
     sp_e2->Wait();
-    auto t2 = Time::now();
+    auto t2 = Time::now(true);
     ASSERT_GT(t1 + timeout, t2);
   });
   auto coro2 = Coroutine::CreateRun([&inte](){

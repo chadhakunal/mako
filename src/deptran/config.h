@@ -50,6 +50,7 @@ class Config {
   // common configuration
   ClientType client_type_ = Closed;
   int client_rate_ = -1;
+  int32_t client_max_undone_ = -1;
   int32_t tx_proto_ = 0; // transaction protocol
   int32_t replica_proto_ = 0; // replication protocol
   uint32_t proc_id_;
@@ -58,6 +59,7 @@ class Config {
   std::vector<double> txn_weight_;
   map<string, double> txn_weights_;
   std::string proc_name_;
+  std::string exp_setting_name_;
   bool batch_start_;
   bool early_return_;
   bool retry_wait_;
@@ -66,11 +68,21 @@ class Config {
   uint16_t n_concurrent_;
   int32_t max_retry_;
   string dist_ = "uniform";
+  int32_t range_ = -1;
   float coeffcient_ = 0; // "uniform"
   int32_t rotate_{3};
   int32_t n_parallel_dispatch_{0};
   bool forwarding_enabled_ = false;
   int timestamp_{TimestampType::CLOCK};
+
+  // failover configuration
+  bool failover_;
+  bool failover_soft_;
+  bool failover_random_;
+  bool failover_leader_;
+  int32_t failover_srv_idx_;
+  int32_t failover_run_int_;
+  int32_t failover_stop_int_;
 
   // TODO remove, will cause problems.
   uint32_t num_site_;
@@ -80,7 +92,14 @@ class Config {
   uint32_t num_coordinator_threads_;
   uint32_t sid_;
   uint32_t cid_;
-  
+
+  // carousel mode choice
+  bool carousel_basic_mode_ = false;
+
+  // Jetpack fast path mode
+  int jetpack_fastpath_attempt_rate_ = 0;
+  int jetpack_recovery_batch_size_ = 1000;
+
   enum SiteInfoType { CLIENT, SERVER };
   struct SiteInfo {
     siteid_t id; // unique site id
@@ -137,6 +156,9 @@ class Config {
   map<string, string> site_proc_map_;
 
   Sharding* sharding_;
+  
+  // Store the raw YAML configuration
+  YAML::Node yaml_config_;
 
  protected:
 
@@ -152,13 +174,16 @@ class Config {
          uint32_t duration,
          bool heart_beat,
          single_server_t single_server,
-         string logging_path
+         string logging_path,
+         int jetpack_fastpath_attempt_rate
   );
   int GetClientPort(std::string site_name);
 
  public:
   static int CreateConfig(int argc,
                           char **argv);
+
+  // @safe
   static Config* GetConfig();
   static void DestroyConfig();
 
@@ -175,9 +200,10 @@ class Config {
   void LoadShardingYML(YAML::Node config);
   void LoadClientYML(YAML::Node client);
   void LoadSchemaYML(YAML::Node config);
+  void LoadFailoverYML(YAML::Node config);
   void LoadSchemaTableColumnYML(Sharding::tb_info_t &tb_info,
                                 YAML::Node column);
-
+  void UpdateWeights(YAML::Node config);
 
   void InitMode(std::string&cc_name, string&ab_name);
   void InitBench(std::string &);
@@ -203,9 +229,11 @@ class Config {
   const SiteInfo& SiteById(uint32_t id);
   vector<SiteInfo> SitesByPartitionId(parid_t partition_id);
   SiteInfo LeaderSiteByPartitionId(parid_t partition_id);
+  vector<int> SiteIdsByPartitionId(parid_t partition_id);
   vector<SiteInfo> SitesByLocaleId(uint32_t locale_id, SiteInfoType type=SERVER);
   vector<SiteInfo> SitesByProcessName(string proc_name, SiteInfoType type=SERVER);
   SiteInfo* SiteByName(std::string name);
+  // @safe
   int GetPartitionSize(parid_t par_id);
   void UpgradeFromLearnerToLeader();
   void UpgradeFromP1ToLeader();
@@ -229,15 +257,24 @@ class Config {
   uint32_t get_start_coordinator_id();
   int32_t benchmark();
   uint32_t GetNumPartition();
+  int32_t get_num_leaders(parid_t partition_id);
   uint32_t get_scale_factor();
   int32_t get_max_retry();
   single_server_t get_single_server();
   uint32_t get_concurrent_txn();
+  int GetJetpackRecoveryBatchSize() const { return jetpack_recovery_batch_size_; }
   bool get_batch_start();
   bool do_early_return();
   bool do_logging();
   bool IsReplicated();
   int32_t get_tot_req();
+  bool get_failover() { return failover_; }
+  int32_t get_failover_stop_interval() { return failover_stop_int_; }
+  int32_t get_failover_run_interval() { return failover_run_int_; }
+  int32_t get_failover_srv_idx() { return failover_srv_idx_; }
+  bool get_failover_random() { return failover_random_; }
+  bool get_failover_leader() { return failover_leader_; }
+  bool carousel_basic_mode() { return carousel_basic_mode_; }
 
   const char *log_path();
 

@@ -57,6 +57,34 @@ uint64_t ALock::Lock(uint64_t owner,
   return ret_id;
 }
 
+// Overload with wound_callback for jetpack compatibility
+uint64_t ALock::Lock(uint64_t owner,
+                     type_t type,
+                     uint64_t priority,
+                     const std::function<int(void)>& wound_callback) {
+
+  IntEvent& proceed = Reactor::CreateEvent<IntEvent>();
+  uint64_t ret_id = 0;
+  std::function<void(uint64_t)> _yes_callback
+      = [&proceed, &ret_id](uint64_t id) {
+        ret_id = id;
+        verify(id > 0);
+        proceed.Set(1);
+      };
+  std::function<void()> _no_callback
+      = [&]() {
+        proceed.Set(1);
+      };
+  vlock(owner,
+        _yes_callback,
+        _no_callback,
+        type,
+        priority,
+        wound_callback);
+  proceed.Wait();
+  return ret_id;
+}
+
 void ALock::DisableWound(uint64_t lock_req_id) {
   // TODO
 }

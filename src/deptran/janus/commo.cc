@@ -15,6 +15,10 @@ void JanusCommo::SendDispatch(vector<TxPieceData>& cmd,
   auto par_id = cmd[0].partition_id_;
   std::function<void(rusty::Arc<Future>)> cb =
       [callback, tid, par_id](rusty::Arc<Future> fu) {
+        if (fu->get_error_code() != 0) {
+          Log_info("Get a error message in reply");
+          return;
+        }
         int res;
         TxnOutput output;
         MarshallDeputy md;
@@ -23,7 +27,7 @@ void JanusCommo::SendDispatch(vector<TxPieceData>& cmd,
           RccGraph rgraph;
           auto v = rgraph.CreateV(tid);
           RccTx& info = *v;
-          info.partition_.insert(par_id);
+//          info.partition_.insert(par_id);
           verify(rgraph.vertex_index().size() > 0);
           callback(res, output, rgraph);
         } else if (md.kind_ == MarshallDeputy::RCC_GRAPH) {
@@ -57,6 +61,10 @@ void JanusCommo::SendInquire(parid_t pid,
                              const function<void(RccGraph& graph)>& callback) {
   FutureAttr fuattr;
   function<void(rusty::Arc<Future>)> cb = [callback](rusty::Arc<Future> fu) {
+    if (fu->get_error_code() != 0) {
+      Log_info("Get a error message in reply");
+      return;
+    }
     MarshallDeputy md;
     fu->get_reply() >> md;
     // Arc returns const reference, use const_cast for mutation
@@ -81,12 +89,16 @@ void JanusCommo::BroadcastPreAccept(
   verify(rpc_par_proxies_.find(par_id) != rpc_par_proxies_.end());
 
   bool skip_graph = IsGraphOrphan(*sp_graph, txn_id);
-
+  verify(0);
   for (auto& p : rpc_par_proxies_[par_id]) {
     auto proxy = (p.second);
     verify(proxy != nullptr);
     FutureAttr fuattr;
     fuattr.callback = [callback](rusty::Arc<Future> fu) {
+      if (fu->get_error_code() != 0) {
+        Log_info("Get a error message in reply");
+        return;
+      }
       int32_t res;
       MarshallDeputy md;
       fu->get_reply() >> res >> md;
@@ -115,12 +127,17 @@ void JanusCommo::BroadcastAccept(parid_t par_id,
                                  ballot_t ballot,
                                  shared_ptr<RccGraph> graph,
                                  const function<void(int)>& callback) {
+  verify(0);
   verify(rpc_par_proxies_.find(par_id) != rpc_par_proxies_.end());
   for (auto& p : rpc_par_proxies_[par_id]) {
     auto proxy = (p.second);
     verify(proxy != nullptr);
     FutureAttr fuattr;
     fuattr.callback = [callback](rusty::Arc<Future> fu) {
+      if (fu->get_error_code() != 0) {
+        Log_info("Get a error message in reply");
+        return;
+      }
       int32_t res;
       fu->get_reply() >> res;
       callback(res);
@@ -129,7 +146,9 @@ void JanusCommo::BroadcastAccept(parid_t par_id,
     // Use shared_ptr directly for MarshallDeputy
     auto sp_graph = std::make_shared<RccGraph>(*graph);
     MarshallDeputy md(sp_graph);
+    rank_t rank = RANK_D;
     auto fu_result = proxy->async_JanusAccept(cmd_id,
+                                              rank,
                                               ballot,
                                               md,
                                               fuattr);
@@ -145,13 +164,17 @@ void JanusCommo::BroadcastCommit(
     shared_ptr<RccGraph> graph,
     const function<void(int32_t, TxnOutput&)>& callback) {
   bool skip_graph = IsGraphOrphan(*graph, cmd_id);
-
+  verify(0);
   verify(rpc_par_proxies_.find(par_id) != rpc_par_proxies_.end());
   for (auto& p : rpc_par_proxies_[par_id]) {
     auto proxy = (p.second);
     verify(proxy != nullptr);
     FutureAttr fuattr;
     fuattr.callback = [callback](rusty::Arc<Future> fu) {
+      if (fu->get_error_code() != 0) {
+        Log_info("Get a error message in reply");
+        return;
+      }
       int32_t res;
       TxnOutput output;
       fu->get_reply() >> res >> output;
@@ -177,17 +200,23 @@ shared_ptr<QuorumEvent> JanusCommo::BroadcastInquireValidation(set<parid_t>& par
     auto proxy = NearestProxyForPartition(par_id).second;
     FutureAttr fuattr;
     fuattr.callback = [e](rusty::Arc<Future> fu) {
+      if (fu->get_error_code() != 0) {
+        Log_info("Get a error message in reply");
+        return;
+      }
       int32_t res;
       fu->get_reply() >> res;
       if (res == 1) {
-        e->n_voted_yes_++;
+        e->VoteYes();
       } else if (res == -1) {
-        e->n_voted_no_++;
+        e->VoteNo();
       } else {
         verify(0);
       }
     };
-    auto fu_result = proxy->async_RccInquireValidation(txid, fuattr);
+    verify(0);
+    int rank = RANK_D;
+    auto fu_result = proxy->async_RccInquireValidation(txid, rank, fuattr);
     // Arc auto-released
   }
   return e;
@@ -198,7 +227,9 @@ void JanusCommo::BroadcastNotifyValidation(txid_t txid, set<parid_t>& pars, int3
       auto proxy = pair.second;
       FutureAttr fuattr;
       fuattr.callback = [](rusty::Arc<Future> fu) {};
-      auto fu_result = proxy->async_RccNotifyGlobalValidation(txid, result, fuattr);
+      int rank = RANK_D;
+      verify(0);
+      auto fu_result = proxy->async_RccNotifyGlobalValidation(txid, rank, result, fuattr);
       // Arc auto-released
     }
   }

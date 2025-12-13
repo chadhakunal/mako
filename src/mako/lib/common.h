@@ -6,6 +6,7 @@
 #include <iostream>
 #include <cstdio>
 #include <cstdlib>
+#include <cstddef>
 #include <sys/file.h>
 #include "rpc.h"
 #include <mutex>
@@ -411,7 +412,7 @@ namespace mako
         }
 
         size_t get_msg_len() {
-            return msg_len + sizeof(request->batch_size) + sizeof(request->req_nr);
+            return msg_len + offsetof(batch_lock_request_t, data);
         }
 
         batch_lock_request_t *get_request_ptr() {

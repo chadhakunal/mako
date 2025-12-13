@@ -37,9 +37,9 @@ TxLogServer *FrameFebruus::CreateScheduler() {
 //vector<rrr::Service *>
 //JanusFrame::CreateRpcServices(uint32_t site_id,
 //                            Scheduler *sched,
-//                            rrr::PollThread *poll_mgr,
+//                            rrr::PollThread *poll_thread_worker,
 //                            ServerControlServiceImpl* scsi) {
-//  return Frame::CreateRpcServices(site_id, sched, poll_mgr, scsi);
+//  return Frame::CreateRpcServices(site_id, sched, poll_thread_worker, scsi);
 //}
 
 mdb::Row *FrameFebruus::CreateRow(const mdb::Schema *schema,

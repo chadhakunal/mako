@@ -4,11 +4,15 @@
 #pragma once
 
 #include "base/all.hpp"
+#include <rusty/arc.hpp>
 #include <rusty/rc.hpp>
 #include <rusty/rc/weak.hpp>
 #include <rusty/refcell.hpp>
 #include <unistd.h>
 #include <array>
+#include <algorithm>
+#include <memory>
+#include <vector>
 #include <cerrno>
 
 #ifdef __APPLE__
@@ -23,6 +27,7 @@
 
 
 namespace rrr {
+using std::shared_ptr;
 
 // Forward declaration
 class PollThreadWorker;
@@ -44,7 +49,11 @@ public:
     // Returns current poll mode (READ/WRITE flags)
     virtual int poll_mode() const = 0;
     // @unsafe - Handles read events (implementation-specific)
-    virtual void handle_read() = 0;
+    virtual size_t content_size() = 0;
+    virtual bool handle_read() = 0;
+    // Break handle_read into two halves to solve reverse backlog problem
+    virtual bool handle_read_one() = 0;
+    virtual bool handle_read_two() = 0;
     // @unsafe - Handles write events (implementation-specific)
     // Returns new poll mode, or MODE_NO_CHANGE (-1) if no update needed
     // PollThreadWorker will call update_mode() based on return value
@@ -57,9 +66,21 @@ public:
 // @unsafe - Wrapper for epoll/kqueue system calls
 // SAFETY: Proper file descriptor management and error checking
 class Epoll {
+ private:
+  std::vector<Pollable*> pending{};
+	int zero_count = 0;
+	long have_count = 0;
+  long no_count = 0;
+	int first = 0;
+  long total_have_time = 0;
+  long total_no_time = 0;
  public:
   // For testing: track number of Remove() calls (static for persistence)
   static inline std::atomic<int> remove_count_{0};
+
+  // Control flags for pause/stop functionality (jetpack)
+  volatile bool* pause;
+  volatile bool* stop;
 
   // @unsafe - Creates epoll/kqueue file descriptor
   // SAFETY: Verifies creation succeeded
@@ -92,6 +113,10 @@ class Epoll {
   // Delete copy constructor and copy assignment
   Epoll(const Epoll&) = delete;
   Epoll& operator=(const Epoll&) = delete;
+
+  // Jetpack split-phase event processing methods
+  std::vector<struct timespec> Wait_One(int& num_ev, bool& slow);
+  void Wait_Two();
 
   // @unsafe - Adds file descriptor to epoll/kqueue
   // SAFETY: Uses system calls with proper error checking, Arc for polymorphism
@@ -232,7 +257,10 @@ class Epoll {
     return 0;
   }
 
-  // @unsafe - Waits for events and dispatches to handlers directly
+  // Jetpack split-phase Wait (declaration - implementation in epoll_wrapper.cc)
+  void Wait();
+
+  // @unsafe - Waits for events and dispatches to handlers directly (mako-dev template version)
   // SAFETY: Uses system calls with timeout, raw pointer safe due to deferred removal
   // userdata is Pollable* - safe to use directly because object remains in fd_to_pollable_ map
   // ModeUpdater: callable with signature void(Pollable*, int new_mode)

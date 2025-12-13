@@ -233,7 +233,7 @@ std::string intToString2(long long num) {
     return ss.str();
 }
 
-long long getCurrentTimeMillis2() {
+static inline long long getCurrentTimeMillis2() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::system_clock::now().time_since_epoch()).count();
 }

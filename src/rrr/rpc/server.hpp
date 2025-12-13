@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <pthread.h>
+#include <memory>
+#include <chrono>
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -66,30 +68,10 @@ public:
 
 // @unsafe - Server listener handling incoming connections
 // SAFETY: Manages socket lifecycle and address info properly
-// External annotations for socket operations
-// @external: {
-//   accept: [safe, (int, sockaddr*, socklen_t*) -> int]
-//   socket: [safe, (int, int, int) -> int]
-//   bind: [safe, (int, const sockaddr*, socklen_t) -> int]
-//   listen: [safe, (int, int) -> int]
-//   close: [safe, (int) -> int]
-//   getaddrinfo: [safe, (const char*, const char*, const addrinfo*, addrinfo**) -> int]
-//   freeaddrinfo: [safe, (addrinfo*) -> void]
-//   setsockopt: [safe, (int, int, int, const void*, socklen_t) -> int]
-//   set_nonblocking: [safe, (int, bool) -> int]
-//   unlink: [safe, (const char*) -> int]
-//   strcpy: [safe, (char*, const char*) -> char*]
-//   strlen: [safe, (const char*) -> size_t]
-//   gai_strerror: [safe, (int) -> const char*]
-//   memset: [safe, (void*, int, size_t) -> void*]
-// }
-
-// @unsafe - Contains unsafe handle_read() method that calls Log functions
-// SAFETY: Thread-safe server listener with proper socket lifecycle management
 class ServerListener: public Pollable {
   friend class Server;
  public:
-  std:: string addr_;
+  std::string addr_;
   Server* server_;  // Non-owning pointer to parent server
   // cannot use smart pointers for memory management because this pointer
   // needs to be freed by freeaddrinfo.
@@ -97,10 +79,16 @@ class ServerListener: public Pollable {
   struct addrinfo* p_svr_addr_{nullptr};
 
   int server_sock_{0};
-  
+
   // @safe - Returns constant poll mode
   int poll_mode() const override {
     return Pollable::READ;
+  }
+
+  // Jetpack: content_size not used for listener
+  size_t content_size() override {
+    verify(0);
+    return 0;
   }
 
   // @safe - Not implemented, will abort if called
@@ -109,7 +97,10 @@ class ServerListener: public Pollable {
 
   // @unsafe - Calls unsafe Log::debug for connection logging
   // SAFETY: Thread-safe with server connection lock
-  void handle_read() override;
+  // Jetpack: split-phase read support
+  bool handle_read_one() override { return handle_read(); }
+  bool handle_read_two() override { verify(0); return true; }
+  bool handle_read() override;
 
   // @safe - Not implemented, will abort if called
   void handle_error() override {verify(0);}
@@ -120,7 +111,7 @@ class ServerListener: public Pollable {
 
   // @safe - Returns file descriptor
   int fd() const override {return server_sock_;}
-  
+
   // @safe - Constructor with proper error handling
   ServerListener(Server* s, std::string addr);
 
@@ -153,8 +144,6 @@ class ServerConnection: public Pollable {
     Marshal in_, out_;
     mutable SpinLock out_l_;
 
-    Marshal block_read_in;
-
     Server* server_;
     int socket_;
 
@@ -184,15 +173,20 @@ class ServerConnection: public Pollable {
     static SpinLock rpc_id_missing_l_s;
 
 public:
+    // Jetpack-specific member
+    int count = 0;
 
     // Public destructor for shared_ptr compatibility
     // @safe - Simple destructor updating counter
     ~ServerConnection();
 
-
     // @unsafe - Initializes connection with socket
     // SAFETY: Increments server connection counter
     ServerConnection(Server* server, int socket);
+
+    bool connected() {
+      return status_ == CONNECTED;
+    }
 
     /**
      * Start a reply message. Must be paired with end_reply().
@@ -240,15 +234,31 @@ public:
 
     // @safe - Returns poll mode based on output buffer
     int poll_mode() const override;
+
+    // Jetpack: content_size not used for connection
+    size_t content_size() override {
+        verify(0);
+        return 0;
+    }
+
     // @unsafe - Writes buffered data to socket
     // SAFETY: Protected by output spinlock
     // Returns new poll mode, or MODE_NO_CHANGE if no update needed
     int handle_write() override;
+
     // @unsafe - Reads and processes RPC requests
     // SAFETY: Creates coroutines for handlers
-    void handle_read() override;
+    bool handle_read() override;  // Batching mode: reads ALL available requests
+
+    // Jetpack: split-phase read support
+    bool handle_read_one() override { return handle_read(); }
+    bool handle_read_two() override { verify(0); return true; }
+
     // @safe - Error handler
     void handle_error() override;
+
+    // Jetpack: handle_free stub
+    void handle_free() {verify(0);}
 
     // Comparison operator for std::unordered_set<rusty::Arc<ServerConnection>>
     friend bool operator==(const rusty::Arc<ServerConnection>& lhs, const rusty::Arc<ServerConnection>& rhs) {
@@ -410,4 +420,3 @@ public:
 };
 
 } // namespace rrr
-

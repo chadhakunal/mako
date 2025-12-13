@@ -6,11 +6,17 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include <mutex>
+#include <utility>
+#include <cstdlib>
+#include <atomic>
 #include "../base/all.hpp"
 #include "reactor.h"
 #include "coroutine.h"
 #include "event.h"
+#include "quorum_event.h"
 #include "epoll_wrapper.h"
+#include "sys/times.h"
 #include <std_annotation.hpp>
 
 // @external: {
@@ -19,10 +25,19 @@
 //   rrr::Event::Test: [unsafe]
 // }
 
+// #define DEBUG_WAIT
+
 namespace rrr {
 
+const int64_t n_max_coroutine = 2000;
+
 thread_local rusty::Option<rusty::Rc<Reactor>> Reactor::sp_reactor_th_{};
+thread_local rusty::Option<rusty::Rc<Reactor>> Reactor::sp_disk_reactor_th_{};
 thread_local rusty::Option<rusty::Rc<Coroutine>> Reactor::sp_running_coro_th_{};
+thread_local std::unordered_map<std::string, std::vector<rusty::Arc<rrr::Pollable>>> Reactor::clients_{};
+thread_local std::unordered_set<std::string> Reactor::dangling_ips_{};
+SpinLock Reactor::disk_job_;
+SpinLock Reactor::trying_job_;
 
 // @safe - Returns current coroutine with single-threaded reference counting
 // SAFETY: Returns copy of thread-local Rc - single-threaded, no synchronization needed
@@ -36,12 +51,17 @@ rusty::Option<rusty::Rc<Coroutine>> Coroutine::CurrentCoroutine() {
 
 // @safe - Creates and runs a new coroutine with rusty::Rc ownership
 rusty::Rc<Coroutine>
-Coroutine::CreateRun(rusty::Function<void()> func) {
+Coroutine::CreateRunImpl(rusty::Function<void()> func, const char* file, int64_t line) {
   auto reactor_rc = Reactor::GetReactor();
   // Rc gives const access, CreateRunCoroutine is const (safe: thread-local, single owner)
-  auto coro = reactor_rc->CreateRunCoroutine(std::move(func));
+  auto coro = reactor_rc->CreateRunCoroutine(std::move(func), file, line);
   // some events might be triggered in the last coroutine.
   return coro;
+}
+
+void Coroutine::Sleep(uint64_t microseconds) {
+  auto x = Reactor::CreateSpEvent<TimeoutEvent>(microseconds);
+  x->Wait();
 }
 
 // @safe - Returns thread-local reactor instance, creates if needed
@@ -50,11 +70,23 @@ rusty::Rc<Reactor>
 Reactor::GetReactor() {
   if (sp_reactor_th_.is_none()) {
     Log_debug("create a coroutine scheduler");
+    if (!REUSING_CORO)
+      Log_warn("reusing coroutine not enabled!");
     sp_reactor_th_ = rusty::Some(rusty::Rc<Reactor>::make());  // In-place construction
     // Use as_ref() to borrow, then initialize thread_id_ - safe because we just created it
     const_cast<Reactor&>(*sp_reactor_th_.as_ref().unwrap()).thread_id_ = std::this_thread::get_id();
   }
   return sp_reactor_th_.as_ref().unwrap().clone();
+}
+
+rusty::Rc<Reactor>
+Reactor::GetDiskReactor() {
+  if (sp_disk_reactor_th_.is_none()) {
+    Log_debug("create a disk coroutine scheduler");
+    sp_disk_reactor_th_ = rusty::Some(rusty::Rc<Reactor>::make());
+    const_cast<Reactor&>(*sp_disk_reactor_th_.as_ref().unwrap()).thread_id_ = std::this_thread::get_id();
+  }
+  return sp_disk_reactor_th_.as_ref().unwrap().clone();
 }
 
 /**
@@ -63,21 +95,35 @@ Reactor::GetReactor() {
  */
 // @safe - Creates and runs coroutine with rusty::Rc single-threaded reference counting
 rusty::Rc<Coroutine>
-Reactor::CreateRunCoroutine(rusty::Function<void()> func) const {
+Reactor::CreateRunCoroutine(rusty::Function<void()> func, const char* file, int64_t line) const {
   rusty::Option<rusty::Rc<Coroutine>> sp_coro;
   if (REUSING_CORO && available_coros_.size() > 0) {
-    //Log_info("Reusing stuff");
+    n_idle_coroutines_--;
     sp_coro = rusty::Some(available_coros_.back().clone());
     available_coros_.pop_back();
     // Rc provides const access, use const_cast to modify (safe: single-threaded)
     auto& coro = const_cast<Coroutine&>(*sp_coro.as_ref().unwrap());
+    coro.id = Coroutine::global_id++;
     coro.func_ = std::move(func);
     // Reset boost_coro_task_ when reusing a recycled coroutine for a new function
     coro.boost_coro_task_ = rusty::None;
     coro.status_ = Coroutine::INIT;
   } else {
     sp_coro = rusty::Some(rusty::Rc<Coroutine>::make(std::move(func)));
+    n_created_coroutines_++;
+    if (n_created_coroutines_ % 1024 == 0) {
+      // Jetpack: Include server_id_ for debugging in distributed environment
+      Log_info("created %d, busy %d, idle %d coroutines on server %d, recent %s:%lld",
+               (int)n_created_coroutines_,
+               (int)n_busy_coroutines_,
+               (int)n_idle_coroutines_,
+               server_id_,
+               file,
+               (long long)line);
+    }
   }
+
+  n_busy_coroutines_++;
 
   // Save old coroutine context - clone to avoid moving
   auto sp_old_coro = sp_running_coro_th_.is_some()
@@ -103,7 +149,7 @@ Reactor::CreateRunCoroutine(rusty::Function<void()> func) const {
     coros_.erase(sp_coro.as_ref().unwrap().clone());
   }
 
-  Loop();
+  Loop(false, true);  // Process events AND check timeouts
 
   // yielded or finished, reset to old coro.
   sp_running_coro_th_ = sp_old_coro;
@@ -130,6 +176,7 @@ void Reactor::CheckTimeout(std::vector<std::shared_ptr<Event>>& ready_events ) c
           } else {
             event.status_ = Event::TIMEOUT;
           }
+          // Event will be removed from waiting_events_ when reactor loop scans it
           ready_events.push_back(*it);
           it = timeout_events_.erase(it);
         } else {
@@ -153,18 +200,50 @@ void Reactor::CheckTimeout(std::vector<std::shared_ptr<Event>>& ready_events ) c
 // NOTE: Cannot mark @safe because const method modifies mutable fields (looping_, waiting_events_).
 // In RustyCpp, const = &self which doesn't allow mutation. Use @unsafe for interior mutability.
 // SAFETY: Thread-safe via thread_id verification
-void Reactor::Loop(bool infinite) const {
+// Merged implementation supporting both Paxos (mako) and Raft (jetpack) paths
+void Reactor::Loop(bool infinite, bool check_timeout) const {
   verify(std::this_thread::get_id() == thread_id_);
   looping_ = infinite;
+
   do {
+    // Process disk events (jetpack path)
+    disk_job_.lock();
+    bool has_disk_events = !ready_disk_events_.empty();
+    if (has_disk_events) {
+      auto disk_event = ready_disk_events_.front();
+      ready_disk_events_.pop_front();
+      disk_job_.unlock();
+
+      auto option_coro = disk_event->wp_coro_.upgrade();
+      if (option_coro.is_some()) {
+        auto sp_coro = option_coro.unwrap();
+        disk_event->status_ = Event::READY;
+        if (disk_event->status_ == Event::READY) {
+          disk_event->status_ = Event::DONE;
+        }
+        ContinueCoro(sp_coro);
+      }
+    } else {
+      disk_job_.unlock();
+    }
+
     // Keep processing events until no new ready events are found
-    // This fixes the event chain propagation issue
     bool found_ready_events = true;
     while (found_ready_events) {
       found_ready_events = false;
       std::vector<std::shared_ptr<Event>> ready_events;
 
-      // Check waiting events
+      // Get thread-safe ready events (jetpack/raft path)
+      {
+        std::lock_guard<std::mutex> lock(ready_events_mutex_);
+        if (!ready_events_.empty()) {
+          ready_events = std::move(ready_events_);
+          ready_events_.clear();
+          found_ready_events = true;
+        }
+      }
+
+      // Check waiting events (mako-dev path)
       auto& events = waiting_events_;
       for (auto it = events.begin(); it != events.end();) {
         Event& event = **it;
@@ -176,32 +255,68 @@ void Reactor::Loop(bool infinite) const {
         } else if (event.status_ == Event::DONE) {
           it = events.erase(it);
         } else {
-          it ++;
+          ++it;
         }
       }
 
-      CheckTimeout(ready_events);
-
-      // Process ready events
-      for (auto& sp_ev: ready_events) {
-        Event& event = *sp_ev;
-        auto option_coro = event.wp_coro_.upgrade();
-        verify(option_coro.is_some());
-        auto sp_coro = option_coro.unwrap();
-        verify(coros_.find(sp_coro) != coros_.end());
+      // Scan ONLY composite events (AndEvent, OrEvent, QuorumEvent)
+      // Raft has zero composite events → this loop does nothing → zero overhead!
+      // Paxos has a few QuorumEvents → small list → minimal overhead
+      auto& composite_events = composite_events_;
+      for (auto it = composite_events.begin(); it != composite_events.end();) {
+        Event& event = **it;
+        event.Test();
         if (event.status_ == Event::READY) {
-          event.status_ = Event::DONE;
+          ready_events.push_back(std::move(*it));
+          it = composite_events.erase(it);
+          found_ready_events = true;
+        } else if (event.status_ == Event::DONE) {
+          it = composite_events.erase(it);
         } else {
-          verify(event.status_ == Event::TIMEOUT);
+          ++it;
+        }
+      }
+
+      // Check timeouts if requested
+      if (check_timeout) {
+        size_t before = ready_events.size();
+        CheckTimeout(ready_events);
+        if (ready_events.size() > before) {
+          found_ready_events = true;
+        }
+      }
+
+      // Process all ready events
+      for (auto& sp_event : ready_events) {
+        // Event might already be DONE (processed by another thread in multi-threaded Raft)
+        if (sp_event->status_ == Event::DONE) {
+          continue;
+        }
+        Event& event = *sp_event;
+        auto option_coro = event.wp_coro_.upgrade();
+        if (option_coro.is_none()) {
+          continue;
+        }
+        auto sp_coro = option_coro.unwrap();
+        // Check if coroutine still exists (might have finished already)
+        if (coros_.find(sp_coro) == coros_.end()) {
+          continue;
+        }
+        verify(sp_coro->status_ == Coroutine::PAUSED);
+        if (sp_event->status_ == Event::READY) {
+          sp_event->status_ = Event::DONE;
+        } else {
+          verify(sp_event->status_ == Event::TIMEOUT);
         }
         ContinueCoro(sp_coro);
       }
 
-      // If we're not in infinite mode and found no events, stop inner loop
+      // If not in infinite mode and no events found, stop inner loop
       if (!infinite && !found_ready_events) {
         break;
       }
     }
+
   } while (looping_);
 }
 
@@ -214,6 +329,8 @@ void Reactor::ContinueCoro(rusty::Rc<Coroutine> sp_coro) const {
     : rusty::Option<rusty::Rc<Coroutine>>{};
   sp_running_coro_th_ = rusty::Some(sp_coro.clone());
   verify(!sp_running_coro_th_.as_ref().unwrap()->Finished());
+  n_active_coroutines_++;
+
   if (sp_coro->status_ == Coroutine::INIT) {
     sp_coro->Run();
   } else {
@@ -221,14 +338,70 @@ void Reactor::ContinueCoro(rusty::Rc<Coroutine> sp_coro) const {
     sp_running_coro_th_.as_ref().unwrap()->Continue();
   }
   if (sp_running_coro_th_.as_ref().unwrap()->Finished()) {
-    if (REUSING_CORO) {
-      // Rc provides const access, use const_cast to modify (safe: single-threaded)
-      const_cast<Coroutine&>(*sp_coro).status_ = Coroutine::RECYCLED;
-      available_coros_.push_back(sp_running_coro_th_.as_ref().unwrap().clone());
-    }
-    coros_.erase(sp_running_coro_th_.as_ref().unwrap().clone());
+    auto sp_coro_ref = sp_running_coro_th_.as_ref().unwrap().clone();
+    Recycle(sp_coro_ref);
   }
   sp_running_coro_th_ = sp_old_coro;
+}
+
+void Reactor::Recycle(rusty::Rc<Coroutine>& sp_coro) const {
+  // This fixes the bug that coroutines are not recycling if they don't finish immediately.
+  if (REUSING_CORO) {
+    // Rc provides const access, use const_cast to modify (safe: single-threaded)
+    const_cast<Coroutine&>(*sp_coro).status_ = Coroutine::RECYCLED;
+    const_cast<Coroutine&>(*sp_coro).func_ = {};
+    n_idle_coroutines_++;
+    available_coros_.push_back(sp_coro.clone());
+  }
+  n_busy_coroutines_--;
+  coros_.erase(sp_coro);
+}
+
+void Reactor::DisplayWaitingEv() const {
+  Log_info("waiting_events_: %zu, composite_events_: %zu, ready_events_: %zu",
+           waiting_events_.size(), composite_events_.size(), ready_events_.size());
+}
+
+void Reactor::ReadyEventsThreadSafePushBack(std::shared_ptr<Event> ev) const {
+  std::lock_guard<std::mutex> lock(ready_events_mutex_);
+  ready_events_.push_back(ev);
+}
+
+void Reactor::DiskLoop() const {
+  Reactor::GetReactor()->disk_job_.lock();
+  auto disk_events = Reactor::GetReactor()->disk_events_;
+  auto it = Reactor::GetReactor()->disk_events_.begin();
+  std::vector<std::shared_ptr<DiskEvent>> pending_disk_events_{};
+  while(it != Reactor::GetReactor()->disk_events_.end()){
+    auto disk_event = std::static_pointer_cast<DiskEvent>(*it);
+    it = Reactor::GetReactor()->disk_events_.erase(it);
+    pending_disk_events_.push_back(disk_event);
+  }
+  Reactor::GetReactor()->disk_job_.unlock();
+
+  int total_written = 0;
+  std::unordered_set<std::string> sync_set{};
+  for (size_t i = 0; i < pending_disk_events_.size(); i++) {
+    total_written += pending_disk_events_[i]->Handle();
+    if (pending_disk_events_[i]->sync) {
+      auto it = sync_set.find(pending_disk_events_[i]->file);
+      if (it == sync_set.end()) {
+        sync_set.insert(pending_disk_events_[i]->file);
+      }
+    }
+  }
+
+  for (auto it = sync_set.begin(); it != sync_set.end(); it++) {
+    int fd = ::open(it->c_str(), O_WRONLY | O_APPEND | O_CREAT, 0777);
+    ::fsync(fd);
+    ::close(fd);
+  }
+
+  for(size_t i = 0; i < pending_disk_events_.size(); i++){
+    Reactor::GetReactor()->disk_job_.lock();
+    Reactor::GetReactor()->ready_disk_events_.push_back(pending_disk_events_[i]);
+    Reactor::GetReactor()->disk_job_.unlock();
+  }
 }
 
 // =============================================================================
@@ -323,9 +496,7 @@ void PollThreadWorker::TriggerJob() {
   std::set<rusty::Arc<Job>> jobs_exec = jobs_;
   jobs_.clear();
 
-  auto it = jobs_exec.begin();
-  while (it != jobs_exec.end()) {
-    auto sp_job = *it;
+  for (const auto& sp_job : jobs_exec) {
     Job* job_ptr = const_cast<Job*>(sp_job.get());
     if (job_ptr->Ready()) {
       // Capture sp_job by value to keep the Arc alive
@@ -333,9 +504,10 @@ void PollThreadWorker::TriggerJob() {
         Job* job_ptr = const_cast<Job*>(sp_job.get());
         job_ptr->Work();
       });
-      it = jobs_exec.erase(it);
+      // Don't re-add ready jobs that were executed
     } else {
-      it++;
+      // Re-add jobs that aren't ready yet - they should be checked again later
+      jobs_.insert(sp_job);
     }
   }
 }

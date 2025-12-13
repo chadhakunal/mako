@@ -42,7 +42,7 @@ void output_val(i32 val) {
 void *nc_start_client(void *input) {
   int par_id = ((struct args*)input)->par_id;
   FutureAttr fuattr;  // fuattr
-  fuattr.callback = [&] (Future* fu) {
+  fuattr.callback = [&] (rusty::Arc<Future> fu) {
     i32 val;
     fu->get_reply() >> val;
     output_val(val);

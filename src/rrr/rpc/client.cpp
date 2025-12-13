@@ -76,14 +76,17 @@ void Future::timed_wait(double sec) const {
 void Future::notify_ready(rusty::Arc<Future> self) const {
   bool should_callback = false;
   {
-    auto guard = state_.lock();
-    if (!guard->timed_out) {
-      guard->ready = true;
+    std::lock_guard<std::mutex> cv_lock(*condvar_m_.get());
+    {
+      auto guard = state_.lock();
+      if (!guard->timed_out) {
+        guard->ready = true;
+      }
+      should_callback = guard->ready;
     }
-    should_callback = guard->ready;
+    // Notify while holding condvar_m_ to prevent race with wait()
+    ready_cond_.get()->notify_all();
   }
-  // Notify after releasing state lock
-  ready_cond_.get()->notify_all();
 
   // Execute callback outside lock to avoid deadlock
   if (should_callback && attr_.callback != nullptr) {
@@ -91,8 +94,13 @@ void Future::notify_ready(rusty::Arc<Future> self) const {
     auto x = attr_.callback;
     Coroutine::CreateRun([x, self]() {  // Capture Arc, not raw pointer
       x(self);  // Callback receives Arc<Future>
-    });
+    }, __FILE__, __LINE__);
   }
+}
+
+// Jetpack: set validity flag on output marshal
+void Client::set_valid(bool valid) {
+  out_.borrow_mut()->valid_id = valid;
 }
 
 // @unsafe - Cancels all pending futures with error
@@ -125,9 +133,29 @@ void Client::close() const {
   invalidate_pending_futures();
 }
 
+// Jetpack: handle_free for explicit future cleanup
+void Client::handle_free(i64 xid) const {
+  pending_fu_l_.get()->lock();
+  auto it = pending_fu_.borrow_mut()->find(xid);
+  if (it != pending_fu_.borrow_mut()->end()) {
+    pending_fu_.borrow_mut()->erase(it);
+    // Arc auto-released when removed from map
+  }
+  pending_fu_l_.get()->unlock();
+}
+
+// Jetpack: pause/resume for flow control
+void Client::pause() const {
+  paused_ = true;
+}
+
+void Client::resume() const {
+  paused_ = false;
+}
+
 // @unsafe - Establishes TCP/IPC connection to server
 // SAFETY: Proper socket creation, configuration, and error handling
-int Client::connect(const char* addr) const {
+int Client::connect(const char* addr, bool client) const {
   verify(status_.get() != CONNECTED);
   string addr_str(addr);
   size_t idx = addr_str.find(":");
@@ -136,6 +164,8 @@ int Client::connect(const char* addr) const {
     return EINVAL;
   }
   string host = addr_str.substr(0, idx);
+  const_cast<Client*>(this)->host_ = host;  // Jetpack: store host
+  const_cast<Client*>(this)->client_ = client;  // Jetpack: store client flag
   string port = addr_str.substr(idx + 1);
 #ifdef USE_IPC
   struct sockaddr_un saun;
@@ -191,7 +221,7 @@ int Client::connect(const char* addr) const {
 
   if (rp == nullptr) {
     // failed to connect
-    Log_error("rrr::Client: connect(%s): %s", addr, strerror(errno));
+    // Log_error("rrr::Client: connect(%s): %s", addr, strerror(errno));
     return ENOTCONN;
   }
 #endif
@@ -224,6 +254,8 @@ int Client::handle_write() {
   if (status_.get() != CONNECTED) {
     return Pollable::MODE_NO_CHANGE;
   }
+  // Jetpack: respect pause state
+  if (paused_) return Pollable::MODE_NO_CHANGE;
 
   int result = Pollable::MODE_NO_CHANGE;
   out_l_.get()->lock();
@@ -236,32 +268,70 @@ int Client::handle_write() {
   return result;
 }
 
+// Jetpack: content_size helper
+size_t Client::content_size() {
+  return in_.borrow()->content_size();
+}
+
 // @unsafe - Reads and processes RPC responses
 // SAFETY: Protected by spinlock, validates packet structure
-void Client::handle_read() {
+// Jetpack: Split into handle_read_one and handle_read_two for batching
+bool Client::handle_read() {
+  if (!handle_read_one()) {
+    return false;
+  }
+
+  while (true) {
+    bool done = handle_read_two();
+    if (done) {
+      break;
+    }
+    if (status_.get() != CONNECTED) {
+      return false;
+    }
+  }
+
+  // Ensure any ready futures wake their waiting coroutines (Jetpack + mako compatibility)
+  Reactor::GetReactor()->Loop();
+
+  return true;
+}
+
+// Jetpack: First phase - read data from socket
+bool Client::handle_read_one() {
   if (status_.get() != CONNECTED) {
-    return;
+    return false;
   }
 
   int bytes_read = in_.borrow_mut()->read_from_fd(sock_.get());
-
-  // Optimization: If no new data was read AND buffer is empty, return early.
-  // CRITICAL BUG FIX: With edge-triggered epoll (EPOLLET), we MUST check if
-  // there's buffered data to process. The old code would return early even when
-  // content_size() > 0, causing futures to hang because buffered packets never
-  // got processed and we'd lose the edge trigger.
-  if (bytes_read == 0 && in_.borrow()->content_size() == 0) {
-    return;
+  if (bytes_read == 0) {
+    return false;
   }
 
-  // Process all complete packets in the buffer
-  for (;;) {
-    //Log_info("stuck in client handle_read loop");
+  return true;
+}
+
+// Jetpack: Second phase - process packets from buffer
+bool Client::handle_read_two() {
+  if (status_.get() != CONNECTED) {
+    return false;
+  }
+
+  bool done = false;
+  int iters = 5;
+
+  if (client_) {
+    iters = INT_MAX;
+  }
+
+  for (int i = 0; i < iters; i++) {
     i32 packet_size;
+
     int n_peek = in_.borrow_mut()->peek(&packet_size, sizeof(i32));
+
     if (n_peek == sizeof(i32)
         && in_.borrow()->content_size() >= packet_size + sizeof(i32)) {
-      // consume the packet size
+
       verify(in_.borrow_mut()->read(&packet_size, sizeof(i32)) == sizeof(i32));
 
       v64 v_reply_xid;
@@ -274,6 +344,13 @@ void Client::handle_read() {
       if (it != pending_fu_.borrow_mut()->end()) {
         rusty::Arc<Future> fu = it->second;  // Copy Arc (refcount still 2)
         verify(fu->xid_ == v_reply_xid.get());
+
+        // Jetpack: timing support (commented out but preserved)
+        // struct timespec end;
+        // clock_gettime(CLOCK_MONOTONIC, &end);
+        // long curr = (end.tv_sec - rpc_starts[fu->xid_].tv_sec)*1000000000 + end.tv_nsec - rpc_starts[fu->xid_].tv_nsec;
+        // ... timing calculation ...
+
         pending_fu_.borrow_mut()->erase(it);  // Remove from map (refcount 2→1)
         pending_fu_l_.get()->unlock();
 
@@ -288,13 +365,21 @@ void Client::handle_read() {
       } else {
         // the future might timed out
         pending_fu_l_.get()->unlock();
-      }
 
+        // Jetpack: consume data for timed-out futures
+        Marshal reply;
+        reply.read_from_marshal(*in_.borrow_mut(),
+                                packet_size - v_reply_xid.val_size()
+                                - v_error_code.val_size());
+      }
     } else {
-      // packet incomplete or no more packets to process
+      done = true;
       break;
     }
   }
+
+  Reactor::GetReactor()->Loop();
+  return done;
 }
 
 // @unsafe - Determines polling mode based on output buffer
@@ -319,10 +404,18 @@ FutureResult Client::begin_request(i32 rpc_id, const FutureAttr& attr /* =... */
   }
 
   auto fu = Future::create(xid_counter_.borrow_mut()->next(), attr);
+  // Jetpack: set timeout from client's timeout setting
+  // fu->timeout_ = timeout_;  // TODO: restore if needed
+
   pending_fu_l_.get()->lock();
   pending_fu_.borrow_mut()->insert_or_assign(fu->xid_, fu);  // Store Arc in map (refcount now 2)
   pending_fu_l_.get()->unlock();
-  //Log_info("Starting a new request with rpc_id %ld,xid_:%llu", rpc_id,fu->xid_);
+
+  // Jetpack: timing support
+  // struct timespec begin;
+  // clock_gettime(CLOCK_MONOTONIC, &begin);
+  // rpc_starts[fu->xid_] = begin;
+
   // check if the client gets closed in the meantime
   if (status_.get() != CONNECTED) {
     pending_fu_l_.get()->lock();
@@ -341,6 +434,7 @@ FutureResult Client::begin_request(i32 rpc_id, const FutureAttr& attr /* =... */
 
   *this << v64(fu->xid_);
   *this << rpc_id;
+  const_cast<Client*>(this)->rpc_id_ = rpc_id;  // Jetpack: store rpc_id
 
   // Arc is in pending_fu_ (refcount=2), return copy to caller
   return FutureResult::Ok(fu);
@@ -355,6 +449,10 @@ void Client::end_request() const {
     out_.borrow_mut()->write_bookmark(&*bmark_.borrow_mut()->as_mut().unwrap(), &request_size);
     *bmark_.borrow_mut() = rusty::None;  // Reset to None (automatically deletes old value)
   }
+
+  // Jetpack: reset flags
+  out_.borrow_mut()->found_dep = false;
+  out_.borrow_mut()->valid_id = false;
 
   // always enable write events since the code above gauranteed there
   // will be some data to send
@@ -408,6 +506,7 @@ rusty::Option<rusty::Arc<Client>> ClientPool::get_client(const string& addr) {
     bool ok = true;
     for (int i = 0; i < parallel_connections_; i++) {
       auto client = Client::create(this->poll_thread_worker_.as_ref().unwrap().clone());
+      client->client_ = true;  // Jetpack: mark as client
       if (client->connect(addr.c_str()) != 0) {
         ok = false;
         break;

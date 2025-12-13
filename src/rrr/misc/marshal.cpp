@@ -168,7 +168,7 @@ size_t Marshal::content_size_slow() const {
 
 size_t Marshal::write(const void* p, size_t n) {
     assert(tail_ == nullptr || tail_->next == nullptr);
-
+    chrono::time_point<chrono::steady_clock> start;
     if (head_ == nullptr) {
         assert(tail_ == nullptr);
         head_ = new chunk(p, n);
@@ -177,20 +177,33 @@ size_t Marshal::write(const void* p, size_t n) {
         tail_->next = new chunk(p, n);
         tail_ = tail_->next;
     } else {
+        //if(timing) start = chrono::steady_clock::now();
         size_t n_write = tail_->write(p, n);
-
+        /*if(timing){
+	    auto end =  chrono::steady_clock::now();
+	    auto duration = chrono::duration_cast<chrono::microseconds>(end-start).count();
+	    Log_info("Duration of this tail write is: %d", duration);
+	}*/
         // otherwise the above fully_written() should have returned true
         assert(n_write > 0);
 
         if (n_write < n) {
+	    //Log_info("Less less less");
             const char* pc = (const char *) p;
+	    //if(timing) start = chrono::steady_clock::now();
             tail_->next = new chunk(pc + n_write, n - n_write);
+            /*if(timing){
+	        auto end = chrono::steady_clock::now();
+		auto duration = chrono::duration_cast<chrono::microseconds>(end-start).count();
+		Log_info("Duration of Less less less is: %d", duration);
+	    }*/
             tail_ = tail_->next;
         }
+	
     }
     write_cnt_ += n;
     content_size_ += n;
-    assert(content_size_ == content_size_slow());
+    //assert(content_size_ == content_size_slow());
 
     return n;
 }
@@ -367,6 +380,8 @@ size_t Marshal::read_from_marshal(Marshal& m, size_t n) {
             //       given 2 use cases, it works.
             // @unsafe
             chunk* chnk = m.head_->shared_copy();
+						//clock_gettime(CLOCK_MONOTONIC, &end);
+						//Log_info("time of shared_copy: %d", (end.tv_sec-begin.tv_sec)*1000000000 + end.tv_nsec-begin.tv_nsec);
             if (n_fetch + chnk->content_size() > n) {
                 // only fetch enough bytes we need
                 chnk->write_idx -= (n_fetch + chnk->content_size()) - n;

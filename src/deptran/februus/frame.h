@@ -17,7 +17,7 @@ class FrameFebruus : public Frame {
                                  shared_ptr<TxnRegistry> txn_reg) override;
 //  vector<rrr::Service *> CreateRpcServices(uint32_t site_id,
 //                                           Scheduler *dtxn_sched,
-//                                           rrr::PollThread *poll_mgr,
+//                                           rrr::PollThread *poll_thread_worker,
 //                                           ServerControlServiceImpl *scsi)
 //      override;
   mdb::Row *CreateRow(const mdb::Schema *schema,
