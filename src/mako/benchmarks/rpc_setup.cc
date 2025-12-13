@@ -140,8 +140,6 @@ void erpc_server(
   Notice("the erpc_server is terminated on shardIdx:%d, alpha:%d!", running_shardIndex, alpha);
 }
 
-} // anonymous namespace
-
 void mako::setup_helper(
   abstract_db *db,
   const std::map<int, abstract_ordered_index *> &open_tables)

@@ -699,6 +699,8 @@ target_compile_options(txlog PRIVATE ${BENCH_CXXFLAGS})
 target_compile_definitions(txlog PRIVATE CONFIG_H=\"${CONFIG_H}\")
 
 target_link_libraries(txlog
+    mako
+    erpc
     yaml-cpp
     Boost::system
     Boost::filesystem
@@ -806,7 +808,7 @@ target_include_directories(mako PUBLIC
     "${HOME}"
     "${CMAKE_CURRENT_SOURCE_DIR}/third-party/rusty-cpp/include"
 )
-target_compile_options(mako PUBLIC ${BENCH_CXXFLAGS})
+target_compile_options(mako PUBLIC ${BENCH_CXXFLAGS} -fPIC)
 target_compile_definitions(mako PUBLIC CONFIG_H=\"${CONFIG_H}\")
 target_include_directories(mako PUBLIC ${LIBEVENT_INCLUDE_DIRS})
 set_target_properties(mako PROPERTIES OUTPUT_NAME "mako")

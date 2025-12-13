@@ -47,6 +47,9 @@ namespace mako
         // OWD: Ping a single shard to measure round-trip time
         int pingOneShard(int shard_idx);
         
+        // Check if a remote shard is ready
+        int checkRemoteShardReady(int dstShardIndex);
+        
         void statistics();
         void stop();
         void setBreakTimeout(bool);

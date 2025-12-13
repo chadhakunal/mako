@@ -128,7 +128,13 @@ struct LuigiLogEntry {
   TxnOutput output_;
   std::vector<std::string> read_results_;
 
-  //--- Constructor ---
+  //--- Synchronization for local scheduler mode ---
+  std::atomic<bool> committed_{false};         // Has this entry been committed?
+  uint64_t commit_ts_{0};                      // Commit timestamp from agreement
+  std::condition_variable done_cv_;            // Signal when txn is complete
+  std::mutex done_mutex_;                      // Mutex for done_cv_
+
+  //--- Constructor with default parameters ---
   LuigiLogEntry(txnid_t tid = 0) 
       : tid_(tid),
         proposed_ts_(0),
@@ -146,7 +152,48 @@ struct LuigiLogEntry {
         bound_(0),
         log_id_(0),
         spec_log_id_(0),
-        reply_status_(0) {}
+        reply_status_(0),
+        committed_(false),
+        commit_ts_(0) {}
+
+  //--- Constructor with operation list ---
+  LuigiLogEntry(txnid_t tid, uint64_t expected_time, const std::vector<LuigiOp>& ops)
+      : tid_(tid),
+        ops_(ops),
+        proposed_ts_(expected_time),
+        agreed_ts_(0),
+        dequeue_ts_(0),
+        requeue_count_(0),
+        prev_agree_status_(LUIGI_AGREE_INIT),
+        agree_status_(LUIGI_AGREE_INIT),
+        exec_status_(LUIGI_EXEC_INIT),
+        ts_agreed_(false),
+        exec_agreed_(false),
+        awaiting_reply_(false),
+        send_time_(0),
+        owd_(0),
+        bound_(0),
+        log_id_(0),
+        spec_log_id_(0),
+        reply_status_(0),
+        committed_(false),
+        commit_ts_(0) {}
+
+  //--- Wait for transaction to complete ---
+  void WaitDone() {
+    std::unique_lock<std::mutex> lock(done_mutex_);
+    done_cv_.wait(lock, [this] { return committed_.load(); });
+  }
+
+  //--- Signal transaction completion ---
+  void SignalDone(bool committed, uint64_t commit_ts) {
+    {
+      std::unique_lock<std::mutex> lock(done_mutex_);
+      committed_.store(committed);
+      commit_ts_ = commit_ts;
+    }
+    done_cv_.notify_all();
+  }
 
   //--- Helper: Is this a multi-shard transaction? ---
   bool IsMultiShard() const { return shard_to_keys_.size() > 1; }

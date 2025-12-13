@@ -77,6 +77,12 @@ class SchedulerLuigi : public SchedulerClassic {
   // This is called by the executor when AGREE_FLUSHING is needed
   void RequeueForReposition(std::shared_ptr<LuigiLogEntry> entry);
 
+  // Enqueue a pre-created LuigiLogEntry (for local scheduler mode)
+  // This is used when the entry is created locally instead of from a coordinator request
+  void Enqueue(std::shared_ptr<LuigiLogEntry> entry) {
+    incoming_txn_queue_.enqueue(entry);
+  }
+
  protected:
   // Threads
   void HoldReleaseTd();

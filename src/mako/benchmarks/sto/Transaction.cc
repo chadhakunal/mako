@@ -767,12 +767,12 @@ bool Transaction::try_commit_luigi() {
         // Enqueue and wait for completion
         sched->Enqueue(entry);
         entry->WaitDone();
-        if (!entry->committed) {
+        if (!entry->committed_) {
             TXP_INCREMENT(txp_commit_time_aborts);
             stop(false, nullptr, 0);
             return false;
         }
-        tid_unique_ = static_cast<uint32_t>(entry->commit_ts);
+        tid_unique_ = static_cast<uint32_t>(entry->commit_ts_);
         stop(true, nullptr, 0);
         return true;
     }

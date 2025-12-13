@@ -370,7 +370,7 @@ namespace mako
         // Use warmup mechanism to ping a specific remote shard
         // If the shard responds, it's ready; otherwise timeout/error
 
-        return mako::ErrorCode::SUCCESS;
+        return MakoErrorCode::OK;
 
         // TO FIX: a server is ready on other shards, but this warmup rpc is frequently TIMEOUT!
         /*
@@ -394,7 +394,7 @@ namespace mako
                                 1000);  // 1 second timeout for readiness check
         } catch (int n) {
             Warning("Timeout on InvokeWarmup with error-no:%d!", n);
-            return mako::ErrorCode::TIMEOUT;
+            return MakoErrorCode::TIMEOUT;
         }
         return is_all_response_ok(); */
     }

@@ -1,0 +1,402 @@
+cmake -S . -B build -DMAKO_USE_RAFT=ON
+-- Rusty C++ Checker submodule found at: /root/cse532/mako/third-party/rusty-cpp
+-- Checker will be built on demand at: /root/cse532/mako/third-party/rusty-cpp/target/release/rusty-cpp-checker
+-- I: /root/cse532/mako/third-party/erpc
+-- environment: eth
+CMake Deprecation Warning at third-party/erpc/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 2.8.12 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value or use a ...<max> suffix to tell
+  CMake that the project does not need compatibility with older versions.
+
+
+-- Compilation optimized for performance.
+-- Debugging is disabled.
+-- Profile-guided optimization is disabled.
+-- Logging level = none.
+-- Testing is disabled, so tests may fail.
+-- Selected transport = fake.
+-- Compiling app = latency
+-- DPDK not needed to build eRPC
+STATUS,server compiles
+-- Mako Raft replication enabled
+-- Reuse coroutine enabled
+-- GoogleTest found via find_package
+-- Test targets configured:
+--   RRR Framework Tests:
+--     - test_marshal: Marshal/Unmarshal tests
+--     - test_rpc: RPC client/server tests
+--     - test_rpc_extended: Extended RPC tests (timeouts, reconnection, load)
+--     - test_future: Future/async operation tests
+--     - test_masstree: Core Masstree b-tree regression tests
+--     - test_reactor: Reactor/event system tests
+--     - test_reactor_extended: Extended reactor tests (events, coroutines, load)
+--     - rpcbench: RPC performance benchmark test
+--   Silo/STO Tests:
+--     - test_silo_varint: Varint encoding/decoding (22 tests)
+--     - test_silo_rcu_thread: RCU memory management (9 tests)
+--     - test_silo_allocator_tuple: Allocator + Tuple integration (18 tests)
+--     - test_sto_transaction: STO Transaction RCU (13 tests)
+--     - test_sto_transaction_real: STO Transaction integration tests
+-- Additional perf binaries:
+--   - masstree_perf: On-demand Masstree throughput benchmark (JSON output)
+-- 
+-- Run all tests with: make run_tests
+-- Run Silo/STO tests: make run_silo_sto_tests
+-- Or individually: make test && ctest
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /root/cse532/mako/build
+Building Mako with Raft helper using 4 parallel jobs...
+cmake --build build --parallel 4
+gmake[1]: warning: -j4 forced in submake: resetting jobserver mode.
+gmake[1]: Entering directory '/root/cse532/mako/build'
+gmake[2]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[  1%] Built target rust_build
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[  2%] Built target rcc_rpc_gen
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target rrr
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target gtest
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[  6%] Built target rrr
+[  6%] Built target gtest
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target mako
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target gflags_nothreads_static
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target erpc
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[  7%] Built target gflags_nothreads_static
+Consolidate compiler generated dependencies of target hdr_histogram_static
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[  7%] Building CXX object CMakeFiles/mako.dir/src/mako/benchmarks/rpc_setup.cc.o
+[  9%] Built target hdr_histogram_static
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target hdr_histogram
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 16%] Built target erpc
+[ 17%] Built target hdr_histogram
+Consolidate compiler generated dependencies of target gmock
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[ 17%] Built target gmock
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target gflags_nothreads_shared
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 18%] Built target gflags_nothreads_shared
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target gtest_main
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 19%] Built target gtest_main
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target memdb
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 22%] Built target memdb
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target hello_server
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 23%] Built target hello_server
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target hello_client
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target latency
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 23%] Built target hello_client
+gmake[3]: Entering directory '/root/cse532/mako/build'
+Consolidate compiler generated dependencies of target gmock_main
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 30%] Built target latency
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[ 31%] Built target gmock_main
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[ 31%] Building CXX object CMakeFiles/rpcbench.dir/test/rpcbench.cc.o
+[ 31%] Building CXX object CMakeFiles/test_marshal.dir/test/test_marshal.cc.o
+Consolidate compiler generated dependencies of target txlog
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[3]: Entering directory '/root/cse532/mako/build'
+[ 31%] Building CXX object CMakeFiles/txlog.dir/src/deptran/luigi/luigi_rpc_setup.cc.o
+[ 32%] Building CXX object CMakeFiles/rpcbench.dir/test/benchmark_service.cc.o
+In file included from /root/cse532/mako/src/deptran/luigi/luigi_service.h:6,
+                 from /root/cse532/mako/src/deptran/luigi/luigi_rpc_setup.cc:2:
+/root/cse532/mako/src/deptran/rcc_rpc.h:2630:92: error: ‘parent_set_t’ was not declared in this scope
+ 2630 |     virtual void RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>*, rrr::DeferredReply* defer) = 0;
+      |                                                                                            ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:2630:104: error: template argument 2 is invalid
+ 2630 |     virtual void RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>*, rrr::DeferredReply* defer) = 0;
+      |                                                                                                        ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:2630:104: error: template argument 4 is invalid
+/root/cse532/mako/src/deptran/rcc_rpc.h:2630:105: error: expected identifier before ‘*’ token
+ 2630 |     virtual void RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>*, rrr::DeferredReply* defer) = 0;
+      |                                                                                                         ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:2635:105: error: ‘parent_set_t’ does not name a type
+ 2635 |     virtual void RccCommit(const cmdid_t& id, const rank_t& rank, const int32_t& need_validation, const parent_set_t& parents, int32_t* res, TxnOutput* output, rrr::DeferredReply* defer) = 0;
+      |                                                                                                         ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:2639:128: error: ‘parent_set_t’ has not been declared
+ 2639 |     virtual void RccPreAccept(const cmdid_t& txn_id, const rank_t& rank, const std::vector<SimpleCommand>& cmd, rrr::i32* res, parent_set_t* x, rrr::DeferredReply* defer) = 0;
+      |                                                                                                                                ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:2642:103: error: ‘parent_set_t’ does not name a type
+ 2642 |     virtual void RccAccept(const cmdid_t& txn_id, const rrr::i32& rank, const ballot_t& ballot, const parent_set_t& p, rrr::i32* res, rrr::DeferredReply* defer) = 0;
+      |                                                                                                       ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h: In member function ‘void janus::ClassicService::__RccInquire__wrapper__(rusty::Box<rrr::Request>, rrr::WeakServerConnection)’:
+/root/cse532/mako/src/deptran/rcc_rpc.h:3205:28: error: ‘parent_set_t’ was not declared in this scope
+ 3205 |         std::map<uint64_t, parent_set_t>* out_0 = new std::map<uint64_t, parent_set_t>;
+      |                            ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:3205:40: error: template argument 2 is invalid
+ 3205 |         std::map<uint64_t, parent_set_t>* out_0 = new std::map<uint64_t, parent_set_t>;
+      |                                        ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:3205:40: error: template argument 4 is invalid
+/root/cse532/mako/src/deptran/rcc_rpc.h:3205:86: error: template argument 4 is invalid
+ 3205 |         std::map<uint64_t, parent_set_t>* out_0 = new std::map<uint64_t, parent_set_t>;
+      |                                                                                      ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:3205:60: error: ‘<expression error>’ in namespace ‘std’ does not name a type
+ 3205 |         std::map<uint64_t, parent_set_t>* out_0 = new std::map<uint64_t, parent_set_t>;
+      |                                                            ^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h: In member function ‘void janus::ClassicService::__RccCommit__wrapper__(rusty::Box<rrr::Request>, rrr::WeakServerConnection)’:
+/root/cse532/mako/src/deptran/rcc_rpc.h:3312:9: error: ‘parent_set_t’ was not declared in this scope
+ 3312 |         parent_set_t* in_3 = new parent_set_t;
+      |         ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:3312:23: error: ‘in_3’ was not declared in this scope; did you mean ‘in_2’?
+ 3312 |         parent_set_t* in_3 = new parent_set_t;
+      |                       ^~~~
+      |                       in_2
+/root/cse532/mako/src/deptran/rcc_rpc.h:3312:34: error: ‘parent_set_t’ does not name a type
+ 3312 |         parent_set_t* in_3 = new parent_set_t;
+      |                                  ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h: In member function ‘void janus::ClassicService::__RccPreAccept__wrapper__(rusty::Box<rrr::Request>, rrr::WeakServerConnection)’:
+/root/cse532/mako/src/deptran/rcc_rpc.h:3421:9: error: ‘parent_set_t’ was not declared in this scope
+ 3421 |         parent_set_t* out_1 = new parent_set_t;
+      |         ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:3421:23: error: ‘out_1’ was not declared in this scope; did you mean ‘out_0’?
+ 3421 |         parent_set_t* out_1 = new parent_set_t;
+      |                       ^~~~~
+      |                       out_0
+/root/cse532/mako/src/deptran/rcc_rpc.h:3421:35: error: ‘parent_set_t’ does not name a type
+ 3421 |         parent_set_t* out_1 = new parent_set_t;
+      |                                   ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h: In member function ‘void janus::ClassicService::__RccAccept__wrapper__(rusty::Box<rrr::Request>, rrr::WeakServerConnection)’:
+/root/cse532/mako/src/deptran/rcc_rpc.h:3504:9: error: ‘parent_set_t’ was not declared in this scope
+ 3504 |         parent_set_t* in_3 = new parent_set_t;
+      |         ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:3504:23: error: ‘in_3’ was not declared in this scope; did you mean ‘in_2’?
+ 3504 |         parent_set_t* in_3 = new parent_set_t;
+      |                       ^~~~
+      |                       in_2
+/root/cse532/mako/src/deptran/rcc_rpc.h:3504:34: error: ‘parent_set_t’ does not name a type
+ 3504 |         parent_set_t* in_3 = new parent_set_t;
+      |                                  ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h: At global scope:
+/root/cse532/mako/src/deptran/rcc_rpc.h:4527:88: error: ‘parent_set_t’ was not declared in this scope
+ 4527 |     rrr::i32 RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>* out_0) {
+      |                                                                                        ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:4527:100: error: template argument 2 is invalid
+ 4527 |     rrr::i32 RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>* out_0) {
+      |                                                                                                    ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:4527:100: error: template argument 4 is invalid
+/root/cse532/mako/src/deptran/rcc_rpc.h:4527:101: error: expected identifier before ‘*’ token
+ 4527 |     rrr::i32 RccInquire(const txnid_t& txn_id, const int32_t& rank, std::map<uint64_t, parent_set_t>* out_0) {
+      |                                                                                                     ^
+/root/cse532/mako/src/deptran/rcc_rpc.h:4634:116: error: ‘parent_set_t’ does not name a type
+ 4634 |     rrr::FutureResult async_RccCommit(const cmdid_t& id, const rank_t& rank, const int32_t& need_validation, const parent_set_t& parents, const rrr::FutureAttr& __fu_attr__ = rrr::FutureAttr()) {
+      |                                                                                                                    ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:4647:101: error: ‘parent_set_t’ does not name a type
+ 4647 |     rrr::i32 RccCommit(const cmdid_t& id, const rank_t& rank, const int32_t& need_validation, const parent_set_t& parents, int32_t* res, TxnOutput* output) {
+      |                                                                                                     ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:4750:124: error: ‘parent_set_t’ has not been declared
+ 4750 |     rrr::i32 RccPreAccept(const cmdid_t& txn_id, const rank_t& rank, const std::vector<SimpleCommand>& cmd, rrr::i32* res, parent_set_t* x) {
+      |                                                                                                                            ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:4817:114: error: ‘parent_set_t’ does not name a type
+ 4817 |     rrr::FutureResult async_RccAccept(const cmdid_t& txn_id, const rrr::i32& rank, const ballot_t& ballot, const parent_set_t& p, const rrr::FutureAttr& __fu_attr__ = rrr::FutureAttr()) {
+      |                                                                                                                  ^~~~~~~~~~~~
+/root/cse532/mako/src/deptran/rcc_rpc.h:4830:99: error: ‘parent_set_t’ does not name a type
+ 4830 |     rrr::i32 RccAccept(const cmdid_t& txn_id, const rrr::i32& rank, const ballot_t& ballot, const parent_set_t& p, rrr::i32* res) {
+      |                                                                                                   ^~~~~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/rpc_setup.cc:143:1: error: expected declaration before ‘}’ token
+  143 | } // anonymous namespace
+      | ^
+[ 32%] Linking CXX executable rpcbench
+gmake[3]: *** [CMakeFiles/txlog.dir/build.make:1028: CMakeFiles/txlog.dir/src/deptran/luigi/luigi_rpc_setup.cc.o] Error 1
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[2]: *** [CMakeFiles/Makefile2:374: CMakeFiles/txlog.dir/all] Error 2
+gmake[2]: *** Waiting for unfinished jobs....
+[ 33%] Building CXX object CMakeFiles/mako.dir/src/mako/benchmarks/sto/Transaction.cc.o
+[ 33%] Linking CXX executable test_marshal
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 33%] Built target rpcbench
+[ 33%] Building CXX object CMakeFiles/mako.dir/src/mako/benchmarks/sto/MassTrans.cc.o
+gmake[3]: *** [CMakeFiles/mako.dir/build.make:468: CMakeFiles/mako.dir/src/mako/benchmarks/rpc_setup.cc.o] Error 1
+gmake[3]: *** Waiting for unfinished jobs....
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+[ 33%] Built target test_marshal
+In file included from /root/cse532/mako/src/mako/benchmarks/../rcu.h:16,
+                 from /root/cse532/mako/src/mako/benchmarks/bench.h:16,
+                 from /root/cse532/mako/src/mako/benchmarks/rpc_setup.h:14,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:17:
+/root/cse532/mako/src/mako/benchmarks/../ticker.h: In member function ‘void ticker::tickerloop()’:
+/root/cse532/mako/src/mako/benchmarks/../ticker.h:224:9: error: reference to ‘lock_guard’ is ambiguous
+  224 |         lock_guard<spinlock> lg(ti.lock_);
+      |         ^~~~~~~~~~
+In file included from /usr/include/c++/12/mutex:43,
+                 from /usr/include/c++/12/future:38,
+                 from /root/cse532/mako/src/mako/rocksdb_persistence_fwd.h:7,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Transaction.hh:5,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:2:
+/usr/include/c++/12/bits/std_mutex.h:223:11: note: candidates are: ‘template<class _Mutex> class std::lock_guard’
+  223 |     class lock_guard
+      |           ^~~~~~~~~~
+In file included from /root/cse532/mako/src/mako/benchmarks/../ticker.h:10:
+/root/cse532/mako/src/mako/benchmarks/../lockguard.h:10:7: note:                 ‘template<class BasicLockable> class lock_guard’
+   10 | class lock_guard {
+      |       ^~~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../ticker.h:224:28: error: expected primary-expression before ‘>’ token
+  224 |         lock_guard<spinlock> lg(ti.lock_);
+      |                            ^
+/root/cse532/mako/src/mako/benchmarks/../ticker.h:224:30: error: ‘lg’ was not declared in this scope; did you mean ‘log’?
+  224 |         lock_guard<spinlock> lg(ti.lock_);
+      |                              ^~
+      |                              log
+/root/cse532/mako/src/mako/benchmarks/../rcu.h: At global scope:
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:122:19: error: reference to ‘allocator’ is ambiguous
+  122 |     void *arenas_[allocator::MAX_ARENAS];
+      |                   ^~~~~~~~~
+In file included from /usr/include/c++/12/bits/allocator.h:47,
+                 from /usr/include/c++/12/unordered_map:40,
+                 from /usr/include/c++/12/functional:61,
+                 from /root/cse532/mako/src/mako/rocksdb_persistence_fwd.h:6:
+/usr/include/c++/12/bits/memoryfwd.h:64:11: note: candidates are: ‘template<class> class std::allocator’
+   64 |     class allocator;
+      |           ^~~~~~~~~
+In file included from /root/cse532/mako/src/mako/benchmarks/../rcu.h:12:
+/root/cse532/mako/src/mako/benchmarks/../allocator.h:25:7: note:                 ‘class allocator’
+   25 | class allocator {
+      |       ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:123:22: error: reference to ‘allocator’ is ambiguous
+  123 |     size_t deallocs_[allocator::MAX_ARENAS]; // keeps track of the number of
+      |                      ^~~~~~~~~
+/usr/include/c++/12/bits/memoryfwd.h:64:11: note: candidates are: ‘template<class> class std::allocator’
+   64 |     class allocator;
+      |           ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../allocator.h:25:7: note:                 ‘class allocator’
+   25 | class allocator {
+      |       ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../rcu.h: In constructor ‘rcu::sync::sync(rcu*)’:
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:141:19: error: ‘arenas_’ was not declared in this scope
+  141 |       NDB_MEMSET(&arenas_[0], 0, sizeof(arenas_));
+      |                   ^~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:142:19: error: ‘deallocs_’ was not declared in this scope; did you mean ‘dealloc’?
+  142 |       NDB_MEMSET(&deallocs_[0], 0, sizeof(deallocs_));
+      |                   ^~~~~~~~~
+      |                   dealloc
+In file included from /root/cse532/mako/src/mako/silo_runtime.h:30,
+                 from /root/cse532/mako/src/mako/benchmarks/benchmark_config.h:17,
+                 from /root/cse532/mako/src/mako/benchmarks/common.h:18,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Interface.hh:9,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Transaction.hh:20:
+/root/cse532/mako/src/mako/benchmarks/../rcu.h: In member function ‘void rcu::sync::ensure_arena(size_t)’:
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:186:18: error: ‘arenas_’ was not declared in this scope; did you mean ‘arena’?
+  186 |       if (likely(arenas_[arena]))
+      |                  ^~~~~~~
+/root/cse532/mako/src/mako/macros.h:66:41: note: in definition of macro ‘likely’
+   66 | #define likely(x)   __builtin_expect(!!(x), 1)
+      |                                         ^
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:189:7: error: ‘arenas_’ was not declared in this scope; did you mean ‘arena’?
+  189 |       arenas_[arena] = allocator::AllocateArenas(pin_cpu_, arena);
+      |       ^~~~~~~
+      |       arena
+/root/cse532/mako/src/mako/benchmarks/../rcu.h:189:24: error: reference to ‘allocator’ is ambiguous
+  189 |       arenas_[arena] = allocator::AllocateArenas(pin_cpu_, arena);
+      |                        ^~~~~~~~~
+/usr/include/c++/12/bits/memoryfwd.h:64:11: note: candidates are: ‘template<class> class std::allocator’
+   64 |     class allocator;
+      |           ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/../allocator.h:25:7: note:                 ‘class allocator’
+   25 | class allocator {
+      |       ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc: In member function ‘bool Transaction::try_commit_luigi()’:
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:768:16: error: ‘class janus::SchedulerLuigi’ has no member named ‘Enqueue’
+  768 |         sched->Enqueue(entry);
+      |                ^~~~~~~
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:769:16: error: ‘using element_type = struct janus::LuigiLogEntry’ {aka ‘struct janus::LuigiLogEntry’} has no member named ‘WaitDone’
+  769 |         entry->WaitDone();
+      |                ^~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:770:21: error: ‘using element_type = struct janus::LuigiLogEntry’ {aka ‘struct janus::LuigiLogEntry’} has no member named ‘committed’
+  770 |         if (!entry->committed) {
+      |                     ^~~~~~~~~
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:775:52: error: ‘using element_type = struct janus::LuigiLogEntry’ {aka ‘struct janus::LuigiLogEntry’} has no member named ‘commit_ts’
+  775 |         tid_unique_ = static_cast<uint32_t>(entry->commit_ts);
+      |                                                    ^~~~~~~~~
+In file included from /usr/include/c++/12/bits/alloc_traits.h:33,
+                 from /usr/include/c++/12/ext/alloc_traits.h:34,
+                 from /usr/include/c++/12/unordered_map:41:
+/usr/include/c++/12/bits/stl_construct.h: In instantiation of ‘constexpr void std::_Construct(_Tp*, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}]’:
+/usr/include/c++/12/bits/alloc_traits.h:635:19:   required from ‘static constexpr void std::allocator_traits<std::allocator<void> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; allocator_type = std::allocator<void>]’
+/usr/include/c++/12/bits/shared_ptr_base.h:604:39:   required from ‘std::_Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp>::_Sp_counted_ptr_inplace(_Alloc, _Args&& ...) [with _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:971:16:   required from ‘std::__shared_count<_Lp>::__shared_count(_Tp*&, std::_Sp_alloc_shared_tag<_Alloc>, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:1712:14:   required from ‘std::__shared_ptr<_Tp, _Lp>::__shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr.h:464:59:   required from ‘std::shared_ptr<_Tp>::shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry]’
+/usr/include/c++/12/bits/shared_ptr.h:1009:14:   required from ‘std::shared_ptr<std::_NonArray<_Tp> > std::make_shared(_Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}; _NonArray<_Tp> = janus::LuigiLogEntry]’
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:766:60:   required from here
+/usr/include/c++/12/bits/stl_construct.h:115:28: error: no matching function for call to ‘construct_at(janus::LuigiLogEntry*&, long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp>&)’
+  115 |           std::construct_at(__p, std::forward<_Args>(__args)...);
+      |           ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/include/c++/12/bits/stl_construct.h:94:5: note: candidate: ‘template<class _Tp, class ... _Args> constexpr decltype (::new(void*(0)) _Tp) std::construct_at(_Tp*, _Args&& ...)’
+   94 |     construct_at(_Tp* __location, _Args&&... __args)
+      |     ^~~~~~~~~~~~
+/usr/include/c++/12/bits/stl_construct.h:94:5: note:   template argument deduction/substitution failed:
+/usr/include/c++/12/bits/stl_construct.h: In substitution of ‘template<class _Tp, class ... _Args> constexpr decltype (::new(void*(0)) _Tp) std::construct_at(_Tp*, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}]’:
+/usr/include/c++/12/bits/stl_construct.h:115:21:   required from ‘constexpr void std::_Construct(_Tp*, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}]’
+/usr/include/c++/12/bits/alloc_traits.h:635:19:   required from ‘static constexpr void std::allocator_traits<std::allocator<void> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; allocator_type = std::allocator<void>]’
+/usr/include/c++/12/bits/shared_ptr_base.h:604:39:   required from ‘std::_Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp>::_Sp_counted_ptr_inplace(_Alloc, _Args&& ...) [with _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:971:16:   required from ‘std::__shared_count<_Lp>::__shared_count(_Tp*&, std::_Sp_alloc_shared_tag<_Alloc>, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:1712:14:   required from ‘std::__shared_ptr<_Tp, _Lp>::__shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr.h:464:59:   required from ‘std::shared_ptr<_Tp>::shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry]’
+/usr/include/c++/12/bits/shared_ptr.h:1009:14:   required from ‘std::shared_ptr<std::_NonArray<_Tp> > std::make_shared(_Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}; _NonArray<_Tp> = janus::LuigiLogEntry]’
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:766:60:   required from here
+/usr/include/c++/12/bits/stl_construct.h:96:17: error: no matching function for call to ‘janus::LuigiLogEntry::LuigiLogEntry(long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp>&)’
+   96 |     -> decltype(::new((void*)0) _Tp(std::declval<_Args>()...))
+      |                 ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /root/cse532/mako/src/deptran/luigi/luigi_scheduler.h:9,
+                 from /root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:15:
+/root/cse532/mako/src/deptran/luigi/luigi_entry.h:132:3: note: candidate: ‘janus::LuigiLogEntry::LuigiLogEntry(uint64_t)’
+  132 |   LuigiLogEntry(txnid_t tid = 0)
+      |   ^~~~~~~~~~~~~
+/root/cse532/mako/src/deptran/luigi/luigi_entry.h:132:3: note:   candidate expects 1 argument, 3 provided
+/usr/include/c++/12/bits/stl_construct.h: In instantiation of ‘constexpr void std::_Construct(_Tp*, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}]’:
+/usr/include/c++/12/bits/alloc_traits.h:635:19:   required from ‘static constexpr void std::allocator_traits<std::allocator<void> >::construct(allocator_type&, _Up*, _Args&& ...) [with _Up = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; allocator_type = std::allocator<void>]’
+/usr/include/c++/12/bits/shared_ptr_base.h:604:39:   required from ‘std::_Sp_counted_ptr_inplace<_Tp, _Alloc, _Lp>::_Sp_counted_ptr_inplace(_Alloc, _Args&& ...) [with _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:971:16:   required from ‘std::__shared_count<_Lp>::__shared_count(_Tp*&, std::_Sp_alloc_shared_tag<_Alloc>, _Args&& ...) [with _Tp = janus::LuigiLogEntry; _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr_base.h:1712:14:   required from ‘std::__shared_ptr<_Tp, _Lp>::__shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry; __gnu_cxx::_Lock_policy _Lp = __gnu_cxx::_S_atomic]’
+/usr/include/c++/12/bits/shared_ptr.h:464:59:   required from ‘std::shared_ptr<_Tp>::shared_ptr(std::_Sp_alloc_shared_tag<_Tp>, _Args&& ...) [with _Alloc = std::allocator<void>; _Args = {long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp, std::allocator<janus::LuigiOp> >&}; _Tp = janus::LuigiLogEntry]’
+/usr/include/c++/12/bits/shared_ptr.h:1009:14:   required from ‘std::shared_ptr<std::_NonArray<_Tp> > std::make_shared(_Args&& ...) [with _Tp = janus::LuigiLogEntry; _Args = {long unsigned int&, long unsigned int&, vector<janus::LuigiOp, allocator<janus::LuigiOp> >&}; _NonArray<_Tp> = janus::LuigiLogEntry]’
+/root/cse532/mako/src/mako/benchmarks/sto/Transaction.cc:766:60:   required from here
+/usr/include/c++/12/bits/stl_construct.h:119:7: error: no matching function for call to ‘janus::LuigiLogEntry::LuigiLogEntry(long unsigned int&, long unsigned int&, std::vector<janus::LuigiOp>&)’
+  119 |       ::new((void*)__p) _Tp(std::forward<_Args>(__args)...);
+      |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/root/cse532/mako/src/deptran/luigi/luigi_entry.h:132:3: note: candidate: ‘janus::LuigiLogEntry::LuigiLogEntry(uint64_t)’
+  132 |   LuigiLogEntry(txnid_t tid = 0)
+      |   ^~~~~~~~~~~~~
+/root/cse532/mako/src/deptran/luigi/luigi_entry.h:132:3: note:   candidate expects 1 argument, 3 provided
+gmake[3]: *** [CMakeFiles/mako.dir/build.make:496: CMakeFiles/mako.dir/src/mako/benchmarks/sto/Transaction.cc.o] Error 1
+gmake[3]: Leaving directory '/root/cse532/mako/build'
+gmake[2]: *** [CMakeFiles/Makefile2:426: CMakeFiles/mako.dir/all] Error 2
+gmake[2]: Leaving directory '/root/cse532/mako/build'
+gmake[1]: *** [Makefile:166: all] Error 2
+gmake[1]: Leaving directory '/root/cse532/mako/build'
+make: *** [Makefile:28: mako-raft] Error 2
