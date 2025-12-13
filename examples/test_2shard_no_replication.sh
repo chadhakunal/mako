@@ -5,6 +5,9 @@
 # 1. Show "agg_persist_throughput" keyword
 # 2. Have NewOrder_remote_abort_ratio < 20%
 
+# Get USE_LUIGI flag from environment (defaults to 0 if not set)
+use_luigi=${USE_LUIGI:-0}
+
 echo "========================================="
 echo "Testing 2-shard setup without replication"
 echo "========================================="
@@ -27,13 +30,13 @@ ps aux | grep -i dbtest | awk "{print \$2}" | xargs kill -9 2>/dev/null
 sleep 1
 # Start shard 0 in background
 echo "Starting shard 0..."
-nohup bash bash/shard.sh 2 0 $trd localhost > ${log_prefix}_shard0-$trd.log 2>&1 &
+nohup bash bash/shard.sh 2 0 $trd localhost 0 0 $use_luigi > ${log_prefix}_shard0-$trd.log 2>&1 &
 SHARD0_PID=$!
 sleep 5
 
 # Start shard 1 in background (delayed start ensures shard1 stays running while shard0 shuts down)
 echo "Starting shard 1..."
-nohup bash bash/shard.sh 2 1 $trd localhost > ${log_prefix}_shard1-$trd.log 2>&1 &
+nohup bash bash/shard.sh 2 1 $trd localhost 0 0 $use_luigi > ${log_prefix}_shard1-$trd.log 2>&1 &
 SHARD1_PID=$!
 
 # Wait for experiments to run

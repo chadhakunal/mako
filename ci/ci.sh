@@ -3,6 +3,24 @@
 
 set -e  # Exit on error
 
+# Parse global flags
+USE_LUIGI=0
+COMMAND=""
+
+# Parse command line arguments
+for arg in "$@"; do
+    case "$arg" in
+        --use-luigi)
+            USE_LUIGI=1
+            ;;
+        *)
+            if [ -z "$COMMAND" ]; then
+                COMMAND="$arg"
+            fi
+            ;;
+    esac
+done
+
 # Function to check for hanging processes after a test
 check_for_hanging_processes() {
     local test_name="$1"
@@ -80,7 +98,7 @@ compile() {
     echo "========================================="
     echo "Running: ./ci/ci.sh compile"
     echo "========================================="
-    make -j32
+    make -j4
     # Generate configuration
     bash ./src/mako/update_config.sh
 }
@@ -117,7 +135,7 @@ run_2shard_no_replication() {
     echo "========================================="
     cleanup_processes
     set +e
-    bash ./examples/test_2shard_no_replication.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_no_replication.sh
     local test_result=$?
     set -e
     check_for_hanging_processes "shardNoReplication"
@@ -132,7 +150,7 @@ run_2shard_no_replication_erpc() {
     echo "========================================="
     cleanup_processes
     set +e
-    MAKO_TRANSPORT=erpc bash ./examples/test_2shard_no_replication.sh
+    MAKO_TRANSPORT=erpc USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_no_replication.sh
     local test_result=$?
     set -e
     check_for_hanging_processes "shardNoReplicationErpc"
@@ -147,7 +165,7 @@ run_1shard_replication() {
     cleanup_processes
     # Run test and capture exit code (set +e to prevent immediate exit)
     set +e
-    bash ./examples/test_1shard_replication.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_1shard_replication.sh
     local test_result=$?
     set -e
     # Always check for hanging processes, even if test failed
@@ -164,7 +182,7 @@ run_2shard_replication() {
     cleanup_processes
     # Run test and capture exit code (set +e to prevent immediate exit)
     set +e
-    bash ./examples/test_2shard_replication.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_replication.sh
     local test_result=$?
     set -e
     # Always check for hanging processes, even if test failed
@@ -181,7 +199,7 @@ run_2shard_replication_erpc() {
     cleanup_processes
     # Run test and capture exit code (set +e to prevent immediate exit)
     set +e
-    MAKO_TRANSPORT=erpc bash ./examples/test_2shard_replication.sh
+    MAKO_TRANSPORT=erpc USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_replication.sh
     local test_result=$?
     set -e
     # Always check for hanging processes, even if test failed
@@ -198,7 +216,7 @@ run_1shard_replication_simple() {
     cleanup_processes
     # Run test and capture exit code (set +e to prevent immediate exit)
     set +e
-    bash ./examples/test_1shard_replication_simple.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_1shard_replication_simple.sh
     local test_result=$?
     set -e
     # Always check for hanging processes, even if test failed
@@ -215,7 +233,7 @@ run_2shard_replication_simple() {
     cleanup_processes
     # Run test and capture exit code (set +e to prevent immediate exit)
     set +e
-    bash ./examples/test_2shard_replication_simple.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_replication_simple.sh
     local test_result=$?
     set -e
     # Always check for hanging processes, even if test failed
@@ -260,7 +278,7 @@ run_multi_shard_single_process() {
     echo "========================================="
     cleanup_processes
     set +e
-    bash ./examples/test_multi_shard_single_process.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_multi_shard_single_process.sh
     local test_result=$?
     set -e
     check_for_hanging_processes "multiShardSingleProcess"
@@ -274,7 +292,7 @@ run_2shard_single_process() {
     echo "========================================="
     cleanup_processes
     set +e
-    bash ./examples/test_2shard_single_process.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_single_process.sh
     local test_result=$?
     set -e
     check_for_hanging_processes "shard2SingleProcess"
@@ -288,7 +306,7 @@ run_2shard_single_process_replication() {
     echo "========================================="
     cleanup_processes
     set +e
-    bash ./examples/test_2shard_single_process_replication.sh
+    USE_LUIGI=$USE_LUIGI bash ./examples/test_2shard_single_process_replication.sh
     local test_result=$?
     set -e
     check_for_hanging_processes "shard2SingleProcessReplication"
@@ -330,7 +348,7 @@ cleanup() {
 }
 
 # Main entry point with command parsing
-case "${1:-}" in
+case "${COMMAND:-}" in
     compile)
         compile
         ;;

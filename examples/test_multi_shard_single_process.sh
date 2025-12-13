@@ -9,6 +9,9 @@
 # 3. Show "Initialized ShardContext for shard" for each shard
 # 4. Show "agg_persist_throughput" keyword
 
+# Get USE_LUIGI flag from environment (defaults to 0 if not set)
+use_luigi=${USE_LUIGI:-0}
+
 echo "========================================="
 echo "Testing multi-shard single process mode"
 echo "========================================="
@@ -32,6 +35,9 @@ path=$(pwd)/src/mako
 # Build the command for multi-shard single process mode
 # Key: -L 0,1 specifies running shards 0 and 1 in the same process
 CMD="./build/dbtest --num-threads $trd --shard-config $path/config/local-shards2-warehouses$trd.yml -P localhost -L 0,1"
+if [ "$use_luigi" = "1" ]; then
+    CMD="$CMD --use-luigi"
+fi
 
 echo ""
 echo "Configuration:"

@@ -13,6 +13,9 @@
 # 1. Show "agg_persist_throughput" keyword
 # 2. System completes without transaction aborts
 
+# Get USE_LUIGI flag from environment (defaults to 0 if not set)
+use_luigi=${USE_LUIGI:-0}
+
 echo "========================================="
 echo "Testing 2-shard single process mode WITH replication"
 echo "========================================="
@@ -48,23 +51,23 @@ echo ""
 echo "Starting follower processes..."
 
 # Shard 0 followers
-nohup bash bash/shard.sh 2 0 $trd learner 0 1 > ${log_prefix}_shard0-learner.log 2>&1 &
+nohup bash bash/shard.sh 2 0 $trd learner 0 1 $use_luigi > ${log_prefix}_shard0-learner.log 2>&1 &
 SHARD0_LEARNER_PID=$!
-nohup bash bash/shard.sh 2 0 $trd p2 0 1 > ${log_prefix}_shard0-p2.log 2>&1 &
+nohup bash bash/shard.sh 2 0 $trd p2 0 1 $use_luigi > ${log_prefix}_shard0-p2.log 2>&1 &
 SHARD0_P2_PID=$!
 
 # Shard 1 followers
-nohup bash bash/shard.sh 2 1 $trd learner 0 1 > ${log_prefix}_shard1-learner.log 2>&1 &
+nohup bash bash/shard.sh 2 1 $trd learner 0 1 $use_luigi > ${log_prefix}_shard1-learner.log 2>&1 &
 SHARD1_LEARNER_PID=$!
-nohup bash bash/shard.sh 2 1 $trd p2 0 1 > ${log_prefix}_shard1-p2.log 2>&1 &
+nohup bash bash/shard.sh 2 1 $trd p2 0 1 $use_luigi > ${log_prefix}_shard1-p2.log 2>&1 &
 SHARD1_P2_PID=$!
 
 sleep 1
 
 # Start p1 followers (after p2 and learner are up)
-nohup bash bash/shard.sh 2 0 $trd p1 0 1 > ${log_prefix}_shard0-p1.log 2>&1 &
+nohup bash bash/shard.sh 2 0 $trd p1 0 1 $use_luigi > ${log_prefix}_shard0-p1.log 2>&1 &
 SHARD0_P1_PID=$!
-nohup bash bash/shard.sh 2 1 $trd p1 0 1 > ${log_prefix}_shard1-p1.log 2>&1 &
+nohup bash bash/shard.sh 2 1 $trd p1 0 1 $use_luigi > ${log_prefix}_shard1-p1.log 2>&1 &
 SHARD1_P1_PID=$!
 
 sleep 3
