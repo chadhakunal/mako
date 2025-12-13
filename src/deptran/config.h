@@ -32,6 +32,9 @@ class Config {
   void init_hostsmap(const char *hostspath);
   std::string site2host_addr(std::string &name);
   std::string site2host_name(std::string &addr);
+  
+  // Create a minimal config for mako standalone use (without full deptran setup)
+  static void CreateMinimalConfig();
 
   bool heart_beat_;
   // configuration for trial controller.

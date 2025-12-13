@@ -3828,6 +3828,11 @@ tpcc_do_test(abstract_db *db, int argc, char **argv, int run = 0, bench_runner *
   // Setup Luigi RPC for multi-shard agreement protocol (if Luigi mode enabled)
   mako::setup_luigi_rpc();
   
+  // Register tables with local Luigi scheduler (for single-shard mode)
+  if (BenchmarkConfig::getInstance().getUseLuigi()) {
+    mako::setup_luigi_tables(open_tables_by_id, db);
+  }
+  
   r->f_mode=f_mode;
   auto x1 = std::chrono::high_resolution_clock::now() ;
   printf("start worker:%d\n",

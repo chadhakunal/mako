@@ -55,10 +55,13 @@ void LuigiOWD::init(const std::string& config_file,
         }
     }
 
-    // Create dedicated ShardClient for OWD pings
+    // Create dedicated ShardClient for OWD pings only if there are multiple shards
+    // (no need to create RPC infrastructure for single-shard mode)
     // Use partition ID -1 to distinguish from worker threads
-    shard_client_ = std::make_unique<ShardClient>(
-        config_file_, cluster_, local_shard_idx_, -1);
+    if (num_shards_ > 1) {
+        shard_client_ = std::make_unique<ShardClient>(
+            config_file_, cluster_, local_shard_idx_, -1);
+    }
 
     initialized_.store(true);
     

@@ -169,6 +169,11 @@ namespace mako
         void SetupLuigiRpc(rrr::Server* rpc_server,
                           rusty::Arc<rrr::PollThread> poll_thread,
                           const std::map<uint32_t, std::string>& shard_addresses);
+        
+        // Get Luigi scheduler for local dispatch
+        janus::SchedulerLuigi* GetLuigiScheduler() {
+            return shardReceiver ? shardReceiver->GetLuigiScheduler() : nullptr;
+        }
 
     protected:
         transport::Configuration config;
