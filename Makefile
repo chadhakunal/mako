@@ -17,18 +17,30 @@ all: build
 configure:
 	cmake -S . -B $(BUILD_DIR)
 
-build: configure
+build: configure generate-rpc
 	@echo "Building with $(PARALLEL_JOBS) parallel jobs..."
 	cmake --build $(BUILD_DIR) --parallel $(PARALLEL_JOBS)
 
 # Build Mako with the Raft helper enabled
-mako-raft:
+mako-raft: generate-rpc
 	cmake -S . -B $(BUILD_DIR) -DMAKO_USE_RAFT=ON
 	@echo "Building Mako with Raft helper using $(PARALLEL_JOBS) parallel jobs..."
 	cmake --build $(BUILD_DIR) --parallel $(PARALLEL_JOBS)
 
+# Generate RPC header file and add required includes
+generate-rpc:
+	@echo "Generating RPC header files..."
+	bin/rpcgen --cpp --python src/deptran/rcc_rpc.rpc
+	@echo "Adding required includes to generated RPC header..."
+	@if ! grep -q 'include.*rcc/tx.h' src/deptran/rcc_rpc.h; then \
+		sed -i '5i #include "rcc/tx.h"' src/deptran/rcc_rpc.h; \
+		echo "  Added #include \"rcc/tx.h\" to rcc_rpc.h"; \
+	else \
+		echo "  Include already present in rcc_rpc.h"; \
+	fi
+
 # Build with Raft testing coroutines enabled
-raft-test:
+raft-test: generate-rpc
 	cmake -S . -B $(BUILD_DIR) -DMAKO_USE_RAFT=ON -DRAFT_TEST=ON
 	@echo "Building Raft test binaries with $(PARALLEL_JOBS) parallel jobs..."
 	cmake --build $(BUILD_DIR) --parallel $(PARALLEL_JOBS)

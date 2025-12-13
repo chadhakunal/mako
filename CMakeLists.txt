@@ -603,6 +603,7 @@ add_custom_command(
   OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/rcc_rpc.h
          ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/rcc_rpc.py
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/rpcgen --cpp --python src/deptran/rcc_rpc.rpc
+  COMMAND bash -c "if ! grep -q 'include.*rcc/tx.h' src/deptran/rcc_rpc.h; then sed -i '5i #include \"rcc/tx.h\"' src/deptran/rcc_rpc.h; fi"
   DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/rcc_rpc.rpc
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
