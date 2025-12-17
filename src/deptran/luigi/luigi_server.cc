@@ -5,6 +5,7 @@
 #include "luigi_server.h"
 #include "deptran/__dep__.h"
 #include "deptran/rcc/tx.h"
+#include "deptran/s_main.h"
 #include "luigi_common.h"
 #include "luigi_owd.h"
 #include "luigi_scheduler.h"
@@ -12,8 +13,6 @@
 
 #include "benchmarks/benchmark_config.h"
 #include "benchmarks/common.h"
-#include "benchmarks/common2.h"
-#include "benchmarks/sto/Interface.hh"
 #include "lib/common.h"
 #include "lib/fasttransport.h"
 #include "lib/helper_queue.h"

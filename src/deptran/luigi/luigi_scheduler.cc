@@ -1,6 +1,7 @@
 #include "luigi_scheduler.h"
 
 #include "luigi_client.h" // For LuigiClient eRPC coordination
+#include "deptran/__dep__.h" // For logging macros
 
 #include <chrono>
 #include <functional>

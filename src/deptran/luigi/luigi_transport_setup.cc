@@ -1,9 +1,9 @@
 #include "luigi_transport_setup.h"
 
-#include "deptran/__dep__.h"
+#include "mako/lib/configuration.h"
 #include "mako/benchmarks/benchmark_config.h"
 #include "mako/benchmarks/rpc_setup.h"
-#include "mako/lib/configuration.h"
+#include "deptran/__dep__.h"
 
 namespace janus {
 namespace luigi {

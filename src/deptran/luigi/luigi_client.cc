@@ -8,6 +8,7 @@
 #include <random>
 
 #include "benchmarks/sto/Interface.hh"
+#include "rrr/base/logging.hpp"
 
 namespace janus {
 

@@ -689,6 +689,8 @@ add_dependencies(txlog rcc_rpc_gen)
 target_include_directories(txlog PRIVATE
     src
     src/mako
+    src/mako/masstree
+    src/mako/benchmarks/sto/masstree-beta
     src/rrr
     src/memdb
     src/deptran
@@ -703,6 +705,8 @@ target_compile_options(txlog PRIVATE ${BENCH_CXXFLAGS})
 target_compile_definitions(txlog PRIVATE CONFIG_H=\"${CONFIG_H}\")
 
 target_link_libraries(txlog
+    mako
+    erpc
     yaml-cpp
     Boost::system
     Boost::filesystem
@@ -812,7 +816,10 @@ target_include_directories(mako PUBLIC
 target_compile_options(mako PUBLIC ${BENCH_CXXFLAGS})
 target_compile_definitions(mako PUBLIC CONFIG_H=\"${CONFIG_H}\")
 target_include_directories(mako PUBLIC ${LIBEVENT_INCLUDE_DIRS})
-set_target_properties(mako PROPERTIES OUTPUT_NAME "mako")
+set_target_properties(mako PROPERTIES
+    OUTPUT_NAME "mako"
+    POSITION_INDEPENDENT_CODE ON
+)
 
 # ============================================================================
 # BORROW CHECKER REGISTRATION SILO/STO

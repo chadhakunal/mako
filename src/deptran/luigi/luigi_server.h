@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "lib/transport.h"
+#include "lib/configuration.h"
 
 #include "luigi_common.h"
 #include "luigi_entry.h"
