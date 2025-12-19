@@ -26,10 +26,8 @@ LuigiBenchmarkClient::~LuigiBenchmarkClient() {
   // LuigiClient needs to be destroyed before transport
   luigi_client_.reset();
 
-  if (transport_) {
-    delete transport_;
-    transport_ = nullptr;
-  }
+  // Transport is owned by BenchmarkConfig/RpcSetup, do not delete it here
+  transport_ = nullptr;
 }
 
 bool LuigiBenchmarkClient::Initialize() {
@@ -102,6 +100,15 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
   start_time_us_ = GetTimestampUs();
   uint64_t target_end_time = start_time_us_ + config_.duration_sec * 1000000ULL;
 
+  // Initialize per-worker in-flight transaction tracking
+  in_flight_.clear();
+  in_flight_.reserve(config_.num_threads * kMaxInFlightPerWorker);
+  for (int i = 0; i < config_.num_threads * kMaxInFlightPerWorker; ++i) {
+    in_flight_.push_back(std::make_unique<InFlightTxn>());
+    in_flight_.back()->in_use = false;
+    in_flight_.back()->completed.store(false);
+  }
+
   std::cout << "Starting benchmark: type=" << static_cast<int>(type)
             << ", threads=" << config_.num_threads
             << ", duration=" << config_.duration_sec << "s" << std::endl;
@@ -134,22 +141,48 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
 
 void LuigiBenchmarkClient::WorkerThread(int thread_id) {
   try {
-    Log_info("[CLIENT-THREAD-%d] Worker thread started", thread_id);
-    int txn_count = 0;
+    Log_info("[CLIENT-THREAD-%d] Worker thread started (ASYNC PIPELINING mode)", thread_id);
+    int txn_dispatched = 0;
+    int txn_completed = 0;
 
-    // TESTING MODE: Only send 1 cross-shard transaction per worker
-    // Keep trying until we successfully send 1 cross-shard transaction
-    while (running_ && txn_count < 1) {
-      if (!DispatchOneTransaction(thread_id)) {
-        // On failure, add small delay to avoid tight failure loop
-        std::this_thread::sleep_for(std::chrono::microseconds(100));
-      } else {
-        txn_count++;
-        Log_info("[CLIENT-THREAD-%d] TESTING MODE: Dispatched 1 transaction, stopping", thread_id);
+    // ASYNC PIPELINING LOOP:
+    // 1. Send as many transactions as we can (up to kMaxInFlightPerWorker)
+    // 2. Harvest any completed transactions (non-blocking)
+    // 3. Repeat until benchmark ends
+    while (running_) {
+      // Harvest completed transactions (non-blocking)
+      int harvested = HarvestCompletions(thread_id);
+      txn_completed += harvested;
+
+      // Try to fill up in-flight slots
+      int in_flight = CountInFlight(thread_id);
+      while (in_flight < kMaxInFlightPerWorker && running_) {
+        int slot = FindFreeSlot(thread_id);
+        if (slot < 0) break;  // No free slots
+
+        if (DispatchOneTransactionAsync(thread_id, slot)) {
+          txn_dispatched++;
+          in_flight++;
+        } else {
+          // Failed to dispatch - break and try harvesting
+          break;
+        }
+      }
+
+      // Small yield to prevent CPU spinning when all slots are full
+      if (in_flight >= kMaxInFlightPerWorker) {
+        std::this_thread::sleep_for(std::chrono::microseconds(10));
       }
     }
 
-    Log_info("[CLIENT-THREAD-%d] Worker thread stopping (dispatched %d total txns)", thread_id, txn_count);
+    // Final harvest after benchmark stops
+    while (CountInFlight(thread_id) > 0) {
+      HarvestCompletions(thread_id);
+      std::this_thread::sleep_for(std::chrono::microseconds(100));
+    }
+
+    Log_info("[CLIENT-THREAD-%d] Worker stopping (dispatched=%d, completed=%d)", 
+             thread_id, txn_dispatched, txn_completed);
   } catch (int e) {
     Log_info("[CLIENT-THREAD-%d] Caught int exception: %d (coroutine unwinding)", thread_id, e);
   } catch (const std::exception& e) {
@@ -323,11 +356,11 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
         }
         promise->set_value(false);
       },
-      100 // timeout ms (reduced for faster failure detection)
+      2000 // timeout ms (increased to handle slow transactions)
   );
 
   // Wait for result (with shorter timeout to handle shard unavailability)
-  if (future.wait_for(std::chrono::milliseconds(500)) ==
+  if (future.wait_for(std::chrono::milliseconds(3000)) ==
       std::future_status::ready) {
     bool success = future.get();
     // Cleanup builders
@@ -439,6 +472,153 @@ mako::luigi::BenchmarkStats LuigiBenchmarkClient::CalculateStats() {
   }
 
   return stats;
+}
+
+//=============================================================================
+// Async Dispatch Helper Methods
+//=============================================================================
+
+int LuigiBenchmarkClient::FindFreeSlot(int thread_id) {
+  int base = thread_id * kMaxInFlightPerWorker;
+  for (int i = 0; i < kMaxInFlightPerWorker; ++i) {
+    if (!in_flight_[base + i]->in_use) {
+      return i;
+    }
+  }
+  return -1;  // No free slots
+}
+
+int LuigiBenchmarkClient::HarvestCompletions(int thread_id) {
+  int base = thread_id * kMaxInFlightPerWorker;
+  int harvested = 0;
+  
+  for (int i = 0; i < kMaxInFlightPerWorker; ++i) {
+    auto& slot = *in_flight_[base + i];
+    if (slot.in_use && slot.completed.load(std::memory_order_acquire)) {
+      // Record the completed transaction
+      TxnRecord record;
+      record.txn_id = slot.txn_id;
+      record.start_time_us = slot.start_time_us;
+      record.end_time_us = GetTimestampUs();
+      record.committed = slot.committed.load();
+      record.txn_type = slot.txn_type;
+      
+      auto& ts = thread_stats_[thread_id];
+      ts.records.push_back(record);
+      if (record.committed) {
+        ts.committed++;
+      } else {
+        ts.aborted++;
+      }
+      
+      // Free the slot
+      slot.in_use = false;
+      slot.completed.store(false, std::memory_order_release);
+      harvested++;
+    }
+  }
+  
+  return harvested;
+}
+
+int LuigiBenchmarkClient::CountInFlight(int thread_id) {
+  int base = thread_id * kMaxInFlightPerWorker;
+  int count = 0;
+  for (int i = 0; i < kMaxInFlightPerWorker; ++i) {
+    if (in_flight_[base + i]->in_use) {
+      count++;
+    }
+  }
+  return count;
+}
+
+bool LuigiBenchmarkClient::DispatchOneTransactionAsync(int thread_id, int slot_index) {
+  // Generate transaction request
+  LuigiTxnRequest req;
+  try {
+    std::lock_guard<std::mutex> lock(generator_mutex_);
+    generator_->GetTxnReq(&req, 0, 0);
+  } catch (...) {
+    return false;
+  }
+
+  // Assign unique transaction ID
+  req.txn_id = next_txn_id_.fetch_add(1);
+  
+  // Set up the in-flight slot
+  int base = thread_id * kMaxInFlightPerWorker;
+  auto& slot = *in_flight_[base + slot_index];
+  slot.txn_id = req.txn_id;
+  slot.start_time_us = GetTimestampUs();
+  slot.txn_type = req.txn_type;
+  slot.completed.store(false, std::memory_order_release);
+  slot.committed.store(false, std::memory_order_release);
+  slot.in_use = true;
+
+  // Get pointer to slot for capture in callback
+  InFlightTxn* slot_ptr = &slot;
+
+  // Build dispatch request
+  std::map<int, LuigiDispatchBuilder*> requests_per_shard;
+
+  for (uint32_t shard_id : req.target_shards) {
+    auto* builder = new LuigiDispatchBuilder();
+    builder->SetTxnId(req.txn_id).SetReqNr(req.req_id).SetTxnType(req.txn_type);
+    
+    int warehouses_per_shard = config_.gen_config.num_warehouses;
+    uint16_t sender_shard = config_.shard_index;
+    uint16_t sender_client = 0;
+
+    uint16_t target_server_id;
+    if (sender_shard == shard_id) {
+      target_server_id = sender_client;
+    } else {
+      target_server_id = sender_shard * warehouses_per_shard + sender_client;
+    }
+    builder->SetTargetServer(target_server_id);
+
+    uint64_t expected_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+    expected_time += 5000;
+    builder->SetExpectedTime(expected_time);
+
+    for (const auto& op : req.ops) {
+      if (op.op_type == 1) {
+        builder->AddRead(op.table_id, op.key);
+      } else {
+        builder->AddWrite(op.table_id, op.key, op.value);
+      }
+    }
+    builder->SetWorkingSet(req.working_set);
+    requests_per_shard[shard_id] = builder;
+  }
+
+  // Dispatch with async callbacks that set completion flag
+  luigi_client_->InvokeDispatch(
+      req.txn_id, requests_per_shard,
+      [slot_ptr, requests_per_shard](char* respBuf) {
+        // Success callback
+        slot_ptr->committed.store(true, std::memory_order_release);
+        slot_ptr->completed.store(true, std::memory_order_release);
+        // Cleanup builders
+        for (auto& pair : requests_per_shard) {
+          delete pair.second;
+        }
+      },
+      [slot_ptr, requests_per_shard]() {
+        // Error callback
+        slot_ptr->committed.store(false, std::memory_order_release);
+        slot_ptr->completed.store(true, std::memory_order_release);
+        // Cleanup builders
+        for (auto& pair : requests_per_shard) {
+          delete pair.second;
+        }
+      },
+      2000  // timeout ms
+  );
+
+  return true;
 }
 
 } // namespace luigi

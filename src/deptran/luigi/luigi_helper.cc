@@ -24,6 +24,7 @@ namespace luigi {
 namespace {
   std::mutex g_helper_mu;
   std::vector<LuigiHelperServer*> g_helper_servers;
+  std::vector<std::thread> g_helper_threads;
 }
 
 //=============================================================================
@@ -159,7 +160,11 @@ void setup_luigi_helper(
     
     pthread_setname_np(helper_thread.native_handle(), 
                        ("luigi_help_" + std::to_string(par_id)).c_str());
-    helper_thread.detach();
+    
+    {
+      std::lock_guard<std::mutex> lock(g_helper_mu);
+      g_helper_threads.push_back(std::move(helper_thread));
+    }
     
     Log_info("[SETUP-HELPER] Helper server created and started for par_id %d", par_id);
   }
@@ -172,8 +177,22 @@ void stop_luigi_helper() {
   Log_info("Stopping Luigi helper servers...");
   
   std::lock_guard<std::mutex> lock(g_helper_mu);
+  
+  // 1. Signal stop
   for (auto* helper : g_helper_servers) {
     helper->Stop();
+  }
+
+  // 2. Join threads
+  for (auto& t : g_helper_threads) {
+    if (t.joinable()) {
+      t.join();
+    }
+  }
+  g_helper_threads.clear();
+
+  // 3. Delete objects
+  for (auto* helper : g_helper_servers) {
     delete helper;
   }
   g_helper_servers.clear();

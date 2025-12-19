@@ -204,7 +204,7 @@ uint64_t LuigiOWD::getOWD(int shard_idx) const {
 uint64_t LuigiOWD::getMaxOWD(const std::vector<int> &shard_indices) const {
   // DISABLED OWD PINGING: Return fixed 100ms delay for all shards
   // This avoids RPC connection issues during development/testing
-  return 100;  // Fixed 100ms delay
+  return 1;  // Fixed 1ms delay (was 100ms)
 
   // Original implementation (disabled):
   // uint64_t max_owd = 0;

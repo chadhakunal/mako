@@ -5,6 +5,7 @@
 #include "luigi_client.h"
 
 #include <chrono>
+#include <memory>
 #include <random>
 
 #include "benchmarks/sto/Interface.hh"
@@ -280,8 +281,10 @@ void LuigiClient::InvokeDispatch(
   // This is used for RPC client connection tracking, NOT routing
   uint16_t server_id = 0;  // Benchmark client acts as partition 0
 
-  current_request_ = {"luigiDispatch", req_id,       txn_nr,
-                      server_id,       continuation, error_continuation};
+  // NOTE: We store pending request AFTER building data_to_send so we know the
+  // actual number of remote shards that will send RPC responses.
+  // This avoids a bug where num_responses_pending includes local shard but
+  // only remote shards send RPCs, causing callbacks to never fire.
 
   // Build data to send per shard
   // NOTE: Local shard handled directly via local_receiver_, remote via RPC
@@ -340,23 +343,40 @@ void LuigiClient::InvokeDispatch(
                (unsigned char)req->working_set_data[14], (unsigned char)req->working_set_data[15]);
     }
 
-    char resp_buf[sizeof(luigi::DispatchResponse)];
+    // CRITICAL: DispatchResponse is ~16KB due to results_data[16384]
+    // Must allocate on heap to avoid stack smashing
+    auto resp_buf = std::make_unique<char[]>(sizeof(luigi::DispatchResponse));
     local_receiver_->ReceiveRequest(
         luigi::kLuigiDispatchReqType,
         reinterpret_cast<char*>(req),
-        resp_buf);
+        resp_buf.get());
     if (txn_nr <= 10 || txn_nr % 50 == 0) {
-      Log_info("[LUIGI-CLIENT] TXN-%lu: Local shard handled directly", txn_nr);
+      // Log_info("[LUIGI-CLIENT] TXN-%lu: Local shard handled directly", txn_nr);
     }
   }
 
   blocked_ = true;
   num_response_waiting_ = data_to_send.size();
 
+  // NOW store pending request with correct response count (only remote shards)
+  // This must happen AFTER building data_to_send so we know actual RPC count
+  {
+    std::lock_guard<std::mutex> lock(pending_mutex_);
+    PendingRequest pr;
+    pr.name = "luigiDispatch";
+    pr.req_nr = req_id;
+    pr.txn_nr = txn_nr;
+    pr.server_id = server_id;
+    pr.response_cb = continuation;
+    pr.error_cb = error_continuation;
+    pr.num_responses_pending = static_cast<int>(data_to_send.size());  // Only remote shards!
+    pending_requests_[req_id] = pr;
+  }
+
   if (data_to_send.empty()) {
     // All local - no RPCs needed, just return success immediately
     if (txn_nr <= 10 || txn_nr % 50 == 0) {
-      Log_info("[LUIGI-CLIENT] TXN-%lu: All local (handled), completing", txn_nr);
+      // Log_info("[LUIGI-CLIENT] TXN-%lu: All local (handled), completing", txn_nr);
     }
     blocked_ = false;
     num_response_waiting_ = 0;
@@ -398,32 +418,43 @@ void LuigiClient::HandleDispatchReply(char *respBuf) {
   auto *resp = reinterpret_cast<luigi::DispatchResponse *>(respBuf);
 
   if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
-    Log_info("[LUIGI-CLIENT] TXN-%lu: Received dispatch reply (status=%d, commit_ts=%lu, responses_pending=%d)",
-             resp->txn_id, resp->status, resp->commit_timestamp, num_response_waiting_);
+    Log_info("[LUIGI-CLIENT] TXN-%lu: Received dispatch reply (status=%d, commit_ts=%lu, req_nr=%u)",
+             resp->txn_id, resp->status, resp->commit_timestamp, resp->req_nr);
   }
 
-  if (resp->req_nr != current_request_.req_nr) {
-    Log_debug("Received reply for wrong request; req_nr=%u, expected=%u",
-              resp->req_nr, current_request_.req_nr);
+  // Look up the pending request by req_nr
+  PendingRequest pending;
+  bool found = false;
+  {
+    std::lock_guard<std::mutex> lock(pending_mutex_);
+    auto it = pending_requests_.find(resp->req_nr);
+    if (it != pending_requests_.end()) {
+      pending = it->second;
+      pending.num_responses_pending--;
+      if (pending.num_responses_pending <= 0) {
+        // All responses received, remove from map
+        pending_requests_.erase(it);
+      } else {
+        // Update count
+        it->second.num_responses_pending = pending.num_responses_pending;
+      }
+      found = true;
+    }
+  }
+
+  if (!found) {
+    Log_debug("[LUIGI-CLIENT] Received reply for unknown request; req_nr=%u", resp->req_nr);
     return;
   }
 
   // Invoke callback
-  if (current_request_.response_cb) {
-    current_request_.response_cb(respBuf);
+  if (pending.response_cb) {
+    pending.response_cb(respBuf);
   }
 
-  // Track pending responses
-  if (num_response_waiting_ > 0) {
-    num_response_waiting_--;
-  }
-  if (num_response_waiting_ == 0) {
-    blocked_ = false;
-    current_request_.req_nr = 0;
-    
-    if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
-      Log_info("[LUIGI-CLIENT] TXN-%lu: All responses received, unblocked", resp->txn_id);
-    }
+  if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
+    Log_info("[LUIGI-CLIENT] TXN-%lu: Callback invoked, remaining=%d", 
+             resp->txn_id, pending.num_responses_pending);
   }
 }
 

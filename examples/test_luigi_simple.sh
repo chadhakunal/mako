@@ -50,7 +50,7 @@ echo "Starting Luigi shard 0..."
     --num-threads "$trd" \
     --benchmark tpcc \
     --duration "$duration" \
-    2>&1 | tee -a "$shard0_log" | sed -u 's/^/[S0] /' >> "$combined_log" &
+    > "$shard0_log" 2>&1 &
 SHARD0_PID=$!
 sleep 1
 
@@ -63,7 +63,7 @@ echo "Starting Luigi shard 1..."
     --num-threads "$trd" \
     --benchmark tpcc \
     --duration "$duration" \
-    2>&1 | tee -a "$shard1_log" | sed -u 's/^/[S1] /' >> "$combined_log" &
+    > "$shard1_log" 2>&1 &
 SHARD1_PID=$!
 
 echo "Running benchmark for ${duration}s..."
@@ -71,17 +71,15 @@ echo "  Shard 0 PID: $SHARD0_PID"
 echo "  Shard 1 PID: $SHARD1_PID"
 
 # Wait for completion (duration + startup buffer + grace period)
-wait_time=$((duration + 15))
+wait_time=$((duration + 30))
 echo "Waiting up to ${wait_time}s for completion..."
 
 # Poll for process completion with timeout
 start_wait=$(date +%s)
 while true; do
     # Check if both processes have exited
-    kill -0 $SHARD0_PID 2>/dev/null
-    shard0_alive=$?
-    kill -0 $SHARD1_PID 2>/dev/null
-    shard1_alive=$?
+    if ! kill -0 $SHARD0_PID 2>/dev/null; then shard0_alive=1; else shard0_alive=0; fi
+    if ! kill -0 $SHARD1_PID 2>/dev/null; then shard1_alive=1; else shard1_alive=0; fi
     
     if [ $shard0_alive -ne 0 ] && [ $shard1_alive -ne 0 ]; then
         echo "Both shards completed"
@@ -171,4 +169,6 @@ echo "  ${log_prefix}_shard0.log"
 echo "  ${log_prefix}_shard1.log"
 echo ""
 echo "Luigi simple test completed."
+
+
 

@@ -84,6 +84,19 @@ struct TxnRecord {
   int txn_type;
 };
 
+// Maximum number of in-flight transactions per worker for pipelining
+constexpr int kMaxInFlightPerWorker = 16;
+
+// In-flight transaction tracking for async dispatch
+struct InFlightTxn {
+  uint64_t txn_id = 0;
+  uint64_t start_time_us = 0;
+  int txn_type = 0;
+  std::atomic<bool> completed{false};
+  std::atomic<bool> committed{false};
+  bool in_use = false;  // Whether this slot is currently tracking a txn
+};
+
 /**
  * @class LuigiBenchmarkClient
  * @brief Client for running Tiga-style benchmarks on Luigi
@@ -197,6 +210,25 @@ private:
 
   // Mutex for generator access (generators may not be thread-safe)
   std::mutex generator_mutex_;
+
+  // ============ Async Dispatch State ============
+  // Per-worker in-flight transaction tracking for pipelining
+  // Layout: in_flight_[thread_id * kMaxInFlightPerWorker + slot_index]
+  // Using unique_ptr because std::atomic is non-movable
+  std::vector<std::unique_ptr<InFlightTxn>> in_flight_;
+  
+  // Async dispatch helper methods
+  // Find a free slot in the in-flight array for this worker
+  int FindFreeSlot(int thread_id);
+  
+  // Check for completed transactions and harvest their results  
+  int HarvestCompletions(int thread_id);
+  
+  // Count how many slots are currently in use for this worker
+  int CountInFlight(int thread_id);
+  
+  // Async version of dispatch - returns immediately
+  bool DispatchOneTransactionAsync(int thread_id, int slot_index);
 };
 
 // Helper function to create default configs

@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <map>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -244,7 +245,7 @@ private:
   bool blocked_ = false;
   int num_response_waiting_ = 0;
 
-  // Current pending request state
+  // Current pending request state (supports multiple in-flight requests for async dispatch)
   struct PendingRequest {
     std::string name;
     uint32_t req_nr = 0;
@@ -252,7 +253,12 @@ private:
     uint16_t server_id = 0;
     ResponseCallback response_cb;
     ErrorCallback error_cb;
+    int num_responses_pending = 0;  // Track how many shard responses we're waiting for (for async dispatch)
   };
+  // For async dispatch (multiple in-flight transactions)
+  std::map<uint32_t, PendingRequest> pending_requests_;  // Keyed by req_nr
+  std::mutex pending_mutex_;  // Protect pending_requests_ for concurrent access
+  // For single-request operations (status check, OWD ping, etc.)
   PendingRequest current_request_;
 };
 
