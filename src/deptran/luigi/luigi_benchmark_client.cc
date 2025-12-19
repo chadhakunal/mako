@@ -5,6 +5,7 @@
 
 #include "deptran/luigi/luigi_benchmark_client.h"
 #include "deptran/luigi/luigi_client.h"
+#include "deptran/luigi/tpcc_txn_generator.h"  // For TPCC_VAR_* constants
 #include "mako/benchmarks/benchmark_config.h"
 #include "mako/lib/configuration.h"
 #include "mako/lib/fasttransport.h"
@@ -132,21 +133,56 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
 }
 
 void LuigiBenchmarkClient::WorkerThread(int thread_id) {
-  while (running_) {
-    DispatchOneTransaction(thread_id);
+  try {
+    Log_info("[CLIENT-THREAD-%d] Worker thread started", thread_id);
+    int txn_count = 0;
+
+    // TESTING MODE: Only send 1 cross-shard transaction per worker
+    // Keep trying until we successfully send 1 cross-shard transaction
+    while (running_ && txn_count < 1) {
+      if (!DispatchOneTransaction(thread_id)) {
+        // On failure, add small delay to avoid tight failure loop
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+      } else {
+        txn_count++;
+        Log_info("[CLIENT-THREAD-%d] TESTING MODE: Dispatched 1 transaction, stopping", thread_id);
+      }
+    }
+
+    Log_info("[CLIENT-THREAD-%d] Worker thread stopping (dispatched %d total txns)", thread_id, txn_count);
+  } catch (int e) {
+    Log_info("[CLIENT-THREAD-%d] Caught int exception: %d (coroutine unwinding)", thread_id, e);
+  } catch (const std::exception& e) {
+    Log_error("[CLIENT-THREAD-%d] Exception: %s", thread_id, e.what());
+  } catch (...) {
+    Log_error("[CLIENT-THREAD-%d] Unknown exception", thread_id);
   }
 }
 
 bool LuigiBenchmarkClient::DispatchOneTransaction(int thread_id) {
   // Generate transaction request
   LuigiTxnRequest req;
-  {
+  try {
     std::lock_guard<std::mutex> lock(generator_mutex_);
     generator_->GetTxnReq(&req, 0, 0);
+  } catch (int err) {
+    Log_error("[CLIENT-DISPATCH] GetTxnReq threw int: %d", err);
+    return false;
+  } catch (const std::exception& e) {
+    Log_error("[CLIENT-DISPATCH] GetTxnReq exception: %s", e.what());
+    return false;
+  } catch (...) {
+    Log_error("[CLIENT-DISPATCH] GetTxnReq unknown exception");
+    return false;
   }
 
   // Assign unique transaction ID
   req.txn_id = next_txn_id_.fetch_add(1);
+  
+  if (req.txn_id % 50 == 0) {
+    Log_info("[CLIENT-DISPATCH] TXN-%lu: Generated (type=%d, %zu ops, %zu target shards)",
+             req.txn_id, req.txn_type, req.ops.size(), req.target_shards.size());
+  }
 
   // Record start time
   TxnRecord record;
@@ -160,6 +196,12 @@ bool LuigiBenchmarkClient::DispatchOneTransaction(int thread_id) {
   // Record end time
   record.end_time_us = GetTimestampUs();
   record.committed = committed;
+  
+  if (req.txn_id % 50 == 0) {
+    Log_info("[CLIENT-DISPATCH] TXN-%lu: %s (latency=%lu us)",
+             req.txn_id, committed ? "COMMITTED" : "ABORTED",
+             record.end_time_us - record.start_time_us);
+  }
 
   // Store record
   auto &ts = thread_stats_[thread_id];
@@ -175,7 +217,13 @@ bool LuigiBenchmarkClient::DispatchOneTransaction(int thread_id) {
 
 bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
   if (!luigi_client_) {
+    Log_error("[CLIENT-DISPATCH] TXN-%lu: No luigi_client available!", req.txn_id);
     return false;
+  }
+
+  if (req.txn_id % 50 == 0) {
+    Log_info("[CLIENT-DISPATCH] TXN-%lu: Building dispatch request for %zu shards",
+             req.txn_id, req.target_shards.size());
   }
 
   // Create promise for synchronous wait
@@ -185,14 +233,44 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
   // Build dispatch request
   std::map<int, LuigiDispatchBuilder *> requests_per_shard;
 
-  // Group ops by shard (not done here, assuming single shard or simple
-  // partitioning for now) For now, we broadcast the full request to all target
-  // shards
-  // TODO: Ideally allow splitting request by shard
-
+  // Send to all involved shards - each shard executes and responds independently
+  // Client collects all responses to determine final status
   for (uint32_t shard_id : req.target_shards) {
     auto *builder = new LuigiDispatchBuilder();
-    builder->SetTxnId(req.txn_id).SetReqNr(req.req_id);
+    builder->SetTxnId(req.txn_id).SetReqNr(req.req_id).SetTxnType(req.txn_type);
+    
+    // Set target_server_id using Mako's formula from erpc_runner/configuration.cc:
+    // target_server_id = sender_shard * num_warehouses + sender_client
+    //                    - (sender_shard < target_shard ? 0 : num_warehouses)
+    //
+    // SPECIAL CASE: For same-shard operations, use a simple local partition ID
+    // (helper queues are only for cross-shard communication)
+    int warehouses_per_shard = config_.gen_config.num_warehouses;
+    uint16_t sender_shard = config_.shard_index;
+    uint16_t sender_client = 0;  // Use first warehouse as representative
+
+    // IMPORTANT: target_server_id is used for ROUTING on the receiving shard
+    // In Mako's queue model, each shard registers queues for OTHER shards' partitions
+    // So target_server_id should be the SENDER's partition ID, not the destination's!
+    //
+    // Queue registration pattern (for 2 shards, 6 warehouses each):
+    // - Shard 0 registers queues: 6-11 (for requests FROM shard 1)
+    // - Shard 1 registers queues: 0-5 (for requests FROM shard 0)
+    //
+    // Therefore: When shard 0 sends to shard 1, use target_server_id=0 (sender's partition)
+    uint16_t target_server_id;
+    if (sender_shard == shard_id) {
+      // Local same-shard request - use local partition ID
+      target_server_id = sender_client;
+    } else {
+      // Cross-shard request - use SENDER's partition ID for routing
+      target_server_id = sender_shard * warehouses_per_shard + sender_client;
+    }
+
+    Log_info("[CLIENT-DISPATCH] TXN-%lu: FROM shard_%u TO shard_%u, target_server_id=%u (sender partition for queue routing)",
+             req.txn_id, sender_shard, shard_id, target_server_id);
+    
+    builder->SetTargetServer(target_server_id);
 
     // Calculate expected execution time
     uint64_t expected_time =
@@ -212,25 +290,44 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
       }
     }
 
+    // Add working_set (TPC-C parameters)
+    builder->SetWorkingSet(req.working_set);
+
     requests_per_shard[shard_id] = builder;
+    
+    if (req.txn_id % 50 == 0) {
+      Log_info("[CLIENT-DISPATCH] TXN-%lu: Request for shard-%u ready (%zu ops)",
+               req.txn_id, shard_id, req.ops.size());
+    }
+  }
+
+  if (req.txn_id % 50 == 0) {
+    Log_info("[CLIENT-DISPATCH] TXN-%lu: Invoking LuigiClient->InvokeDispatch()",
+             req.txn_id);
   }
 
   // Call LuigiClient
   luigi_client_->InvokeDispatch(
       req.txn_id, requests_per_shard,
-      [promise](char *respBuf) {
+      [promise, txn_id = req.txn_id](char *respBuf) {
         // Success callback
+        if (txn_id % 50 == 0) {
+          Log_info("[CLIENT-RESPONSE] TXN-%lu: Success callback received", txn_id);
+        }
         promise->set_value(true);
       },
-      [promise]() {
+      [promise, txn_id = req.txn_id]() {
         // Error callback
+        if (txn_id % 50 == 0) {
+          Log_error("[CLIENT-RESPONSE] TXN-%lu: Error callback received", txn_id);
+        }
         promise->set_value(false);
       },
-      250 // timeout ms
+      100 // timeout ms (reduced for faster failure detection)
   );
 
-  // Wait for result
-  if (future.wait_for(std::chrono::milliseconds(1000)) ==
+  // Wait for result (with shorter timeout to handle shard unavailability)
+  if (future.wait_for(std::chrono::milliseconds(500)) ==
       std::future_status::ready) {
     bool success = future.get();
     // Cleanup builders
@@ -239,7 +336,10 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
     }
     return success;
   } else {
-    // Timeout
+    // Timeout - shard may be unavailable
+    if (req.txn_id % 50 == 0) {
+      Log_error("[CLIENT-DISPATCH] TXN-%lu: TIMEOUT waiting for response", req.txn_id);
+    }
     // Cleanup builders
     for (auto &pair : requests_per_shard) {
       delete pair.second;
@@ -249,6 +349,47 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
 }
 
 void LuigiBenchmarkClient::Stop() { running_ = false; }
+
+// TEST FUNCTION: Send ONE hardcoded cross-shard NewOrder transaction
+bool LuigiBenchmarkClient::TestOneCrossShardTransaction() {
+  Log_info("=== TESTING: Sending ONE cross-shard NewOrder transaction ===");
+
+  // Hardcoded NewOrder with 2 items:
+  // - Item 0: warehouse 0 (shard 0)
+  // - Item 1: warehouse 3 (shard 1) - this makes it cross-shard
+
+  LuigiTxnRequest req;
+  req.txn_id = next_txn_id_.fetch_add(1);
+  req.txn_type = janus::LUIGI_TXN_TPCC_NEW_ORDER;
+
+  // NewOrder parameters (using constants from tpcc_txn_generator.h):
+  // w_id = 0, d_id = 0, c_id = 100, ol_cnt = 2
+  req.working_set[janus::TPCC_VAR_W_ID] = "0";           // warehouse 0
+  req.working_set[janus::TPCC_VAR_D_ID] = "0";           // district 0
+  req.working_set[janus::TPCC_VAR_C_ID] = "100";         // customer 100
+  req.working_set[janus::TPCC_VAR_OL_CNT] = "2";         // 2 order lines
+
+  // Item 0: warehouse 0 (local to shard 0) - using proper TPCC_VAR_* macros
+  req.working_set[janus::TPCC_VAR_I_ID(0)] = "50";           // item 50
+  req.working_set[janus::TPCC_VAR_S_W_ID(0)] = "0";          // from warehouse 0
+  req.working_set[janus::TPCC_VAR_OL_QUANTITY(0)] = "5";     // quantity 5
+
+  // Item 1: warehouse 3 (shard 1 with 6 warehouses) - CROSS-SHARD!
+  req.working_set[janus::TPCC_VAR_I_ID(1)] = "100";          // item 100
+  req.working_set[janus::TPCC_VAR_S_W_ID(1)] = "3";          // from warehouse 3 - shard 1
+  req.working_set[janus::TPCC_VAR_OL_QUANTITY(1)] = "3";     // quantity 3
+
+  // Determine involved shards (0 and 1)
+  req.target_shards = {0, 1};
+
+  Log_info("[TEST] TXN-%lu: Cross-shard NewOrder - w0:d0:c100, 2 items (w0,w3)", req.txn_id);
+  Log_info("[TEST] TXN-%lu: Item0: i_id=50 from w_id=0 (shard 0), qty=5", req.txn_id);
+  Log_info("[TEST] TXN-%lu: Item1: i_id=100 from w_id=3 (shard 1), qty=3", req.txn_id);
+  Log_info("[TEST] TXN-%lu: Involved shards: {0, 1}", req.txn_id);
+
+  // Dispatch like normal
+  return DispatchRequest(req);
+}
 
 mako::luigi::BenchmarkStats LuigiBenchmarkClient::CalculateStats() {
   BenchmarkStats stats;

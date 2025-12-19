@@ -47,15 +47,17 @@ class LuigiClient; // Forward declaration for leader-to-leader eRPC
  * ready_txn_queue_
  * 5. ExecTd() executes and triggers timestamp agreement for multi-shard txns
  */
-class SchedulerLuigi : public SchedulerClassic {
+// Luigi uses its own execution model and doesn't need TxLogServer
+// TxLogServer is part of Janus framework which Luigi bypasses
+class SchedulerLuigi {
 public:
   SchedulerLuigi();
   virtual ~SchedulerLuigi();
 
-  // Required override from SchedulerClassic - Luigi doesn't use row-level
-  // guards since it uses timestamp ordering instead of locking
+  // Luigi doesn't use row-level guards since it uses timestamp ordering
+  // instead of locking (Guard() is a SchedulerClassic method, not needed here)
   virtual bool Guard(Tx &tx_box, mdb::Row *row, int col_id,
-                     bool write = true) override {
+                     bool write = true) {
     // Luigi uses timestamp-based ordering, not row-level locking
     // Always return true (no guard needed)
     return true;
@@ -71,7 +73,9 @@ public:
   // involved_shards: list of ALL shard IDs involved in this multi-shard
   // transaction
   void LuigiDispatchFromRequest(
-      uint64_t txn_id, uint64_t expected_time, const std::vector<LuigiOp> &ops,
+      uint64_t txn_id, uint64_t expected_time, uint32_t txn_type,
+      const std::vector<LuigiOp> &ops,
+      const std::map<int32_t, std::string> &working_set,
       const std::vector<uint32_t> &involved_shards,
       std::function<void(int status, uint64_t commit_ts,
                          const std::vector<std::string> &read_results)>

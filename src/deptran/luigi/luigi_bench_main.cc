@@ -39,7 +39,13 @@
 #include "deptran/luigi/luigi_benchmark_client.h"
 #include "deptran/luigi/luigi_owd.h"
 #include "deptran/luigi/luigi_transport_setup.h"
+#include "deptran/luigi/luigi_server.h"
+#include "deptran/luigi/luigi_scheduler.h"  // For SetLuigiClient
+#include "deptran/luigi/luigi_state_machine.h"  // For state machine mode
 #include "mako/lib/configuration.h"
+#include "mako/benchmarks/benchmark_config.h"
+
+#include <thread>
 
 using namespace mako::luigi;
 using namespace janus::luigi; // For transport setup functions
@@ -71,6 +77,7 @@ void PrintUsage(const char *prog) {
 }
 
 int main(int argc, char *argv[]) {
+try {
   // Default configuration
   LuigiBenchmarkClient::Config config;
   config.config_file = "";
@@ -86,6 +93,8 @@ int main(int argc, char *argv[]) {
   int warehouses = 0; // 0 means read from config file
   double read_ratio = 0.5;
   int ops_per_txn = 10;
+  bool test_one_txn = false; // TEST MODE: send only one cross-shard transaction
+  bool server_only = false;  // SERVER-ONLY MODE: no benchmark client, just wait
 
   // Parse command line arguments - support both Mako CI style and standalone
   static struct option long_options[] = {
@@ -105,12 +114,14 @@ int main(int argc, char *argv[]) {
       {"warehouses", required_argument, 0, 'w'},
       {"read-ratio", required_argument, 0, 'r'},
       {"ops", required_argument, 0, 'o'},
+      {"test-one", no_argument, 0, '1'},  // TEST: send one transaction
+      {"server-only", no_argument, 0, 'S'},  // SERVER-ONLY: no benchmark client
       {"help", no_argument, 0, 'h'},
       {0, 0, 0, 0}};
 
   int opt;
   int option_index = 0;
-  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:P:h",
+  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:P:1Sh",
                             long_options, &option_index)) != -1) {
     switch (opt) {
     case 'q': // --shard-config (Mako CI style)
@@ -146,6 +157,12 @@ int main(int argc, char *argv[]) {
       break;
     case 'o': // --ops
       ops_per_txn = std::atoi(optarg);
+      break;
+    case '1': // --test-one
+      test_one_txn = true;
+      break;
+    case 'S': // --server-only
+      server_only = true;
       break;
     case 'h':
     default:
@@ -203,14 +220,18 @@ int main(int argc, char *argv[]) {
   }
 
   // Initialize Luigi OWD service (for calculating expected timestamps)
-  std::cout << "Initializing Luigi OWD service..." << std::endl;
+  std::cout << "\n[TRACE] Step 1: Initializing Luigi OWD service..." << std::endl;
+  std::cout << "[TRACE]   - Config: " << config.config_file << std::endl;
+  std::cout << "[TRACE]   - Shard: " << config.shard_index << "/" << config.num_shards << std::endl;
   auto &luigiOwd = LuigiOWD::getInstance();
   luigiOwd.init(config.config_file, config.cluster, config.shard_index,
                 config.num_shards);
   luigiOwd.start();
+  std::cout << "[TRACE] Step 1: OWD service started" << std::endl;
 
   // Setup transport infrastructure (delegates to Mako's setup_erpc_server)
-  std::cout << "Setting up transport infrastructure..." << std::endl;
+  std::cout << "\n[TRACE] Step 2: Setting up transport infrastructure..." << std::endl;
+  std::cout << "[TRACE]   - eRPC servers: " << config.num_threads << std::endl;
   int num_erpc_servers = config.num_threads; // One eRPC server per thread
   if (!luigi::setup_luigi_transport(config.config_file, config.cluster,
                                     config.shard_index, config.num_shards,
@@ -219,16 +240,85 @@ int main(int argc, char *argv[]) {
     luigiOwd.stop();
     return 1;
   }
+  std::cout << "[TRACE] Step 2: Transport infrastructure ready" << std::endl;
+
+  // Create Luigi server and receiver for handling incoming requests
+  std::cout << "\n[TRACE] Step 3: Creating Luigi server for shard " << config.shard_index << "..." << std::endl;
+  
+  // Create receiver (will be shared across helper threads)
+  // Declared here so it's in scope for cleanup at the end
+  std::cout << "[TRACE]   - Creating LuigiReceiver..." << std::endl;
+  janus::LuigiReceiver* luigi_receiver = new janus::LuigiReceiver(config.config_file);
+  
+  std::cout << "[TRACE]   - Initializing Luigi scheduler..." << std::endl;
+  luigi_receiver->InitScheduler(config.shard_index);
+  std::cout << "[TRACE]   - Scheduler initialized" << std::endl;
+
+  // Setup state machine for the benchmark type
+  // This is REQUIRED for TPC-C which uses stored procedure model (working_set, not ops)
+  std::cout << "[TRACE]   - Setting up state machine for " << benchmark_type << "..." << std::endl;
+  auto* scheduler = luigi_receiver->GetScheduler();
+  if (scheduler) {
+    std::shared_ptr<janus::LuigiStateMachine> state_machine;
+    if (benchmark_type == "tpcc") {
+      state_machine = std::make_shared<janus::LuigiTPCCStateMachine>(
+          config.shard_index,     // shard_id
+          0,                      // replica_id
+          config.num_shards,      // shard_num
+          1                       // replica_num
+      );
+    } else if (benchmark_type == "micro" || benchmark_type == "micro_single") {
+      state_machine = std::make_shared<janus::LuigiMicroStateMachine>(
+          config.shard_index,     // shard_id
+          0,                      // replica_id
+          config.num_shards,      // shard_num
+          1                       // replica_num
+      );
+    }
+
+    if (state_machine) {
+      // Configure TPC-C parameters (warehouses, districts, customers, items)
+      if (auto *tpcc_sm = dynamic_cast<janus::LuigiTPCCStateMachine*>(state_machine.get())) {
+        tpcc_sm->SetConfig(
+            config.gen_config.num_warehouses,  // num_warehouses
+            10,                                 // districts_per_warehouse
+            3000,                               // customers_per_district
+            1000                                // num_items (reduced for testing)
+        );
+        std::cout << "[TRACE]   - Configured TPC-C with " << config.gen_config.num_warehouses << " warehouses" << std::endl;
+      }
+
+      state_machine->InitializeTables();
+      state_machine->PopulateData();  // Populate tables with TPC-C data
+      scheduler->SetStateMachine(state_machine);
+      scheduler->EnableStateMachineMode(true);
+      std::cout << "[TRACE]   - State machine initialized: " << state_machine->RTTI() << std::endl;
+      std::cout << "[TRACE]   - Tables populated with data" << std::endl;
+    }
+  }
+
+  // Setup Luigi helper threads - these pull from HelperQueues and call receiver->ReceiveRequest()
+  // This is the Luigi equivalent of Mako's setup_helper()
+  std::cout << "[TRACE] Step 4: Setting up Luigi helper threads..." << std::endl;
+  janus::luigi::setup_luigi_helper(luigi_receiver, config.config_file, config.shard_index);
+  
+  std::cout << "[TRACE] Step 4: Luigi server ready - handling incoming requests" << std::endl;
 
   // Create and initialize benchmark client
-  std::cout << "Creating benchmark client..." << std::endl;
+  std::cout << "\n[TRACE] Step 5: Creating benchmark client..." << std::endl;
   LuigiBenchmarkClient client(config);
+  std::cout << "[TRACE]   - Initializing client..." << std::endl;
   if (!client.Initialize()) {
     std::cerr << "Failed to initialize benchmark client" << std::endl;
     luigi::stop_luigi_transport();
     luigiOwd.stop();
     return 1;
   }
+
+  // Set local receiver for handling local shard requests directly (no RPC)
+  client.GetLuigiClient()->SetLocalReceiver(luigi_receiver);
+
+  std::cout << "[TRACE] Step 5: Client initialized and ready" << std::endl;
 
   // Print configuration
   std::cout << "\n========== Luigi Benchmark Configuration ==========\n";
@@ -248,22 +338,73 @@ int main(int argc, char *argv[]) {
   }
   std::cout << "====================================================\n\n";
 
-  // Run benchmark
-  BenchmarkStats stats;
-  if (benchmark_type == "micro") {
-    stats = client.RunMicroBenchmark();
-  } else if (benchmark_type == "micro_single") {
-    stats = client.RunSingleShardMicroBenchmark();
-  } else if (benchmark_type == "tpcc") {
-    stats = client.RunTPCCBenchmark();
+  // Wait for all shards to be ready using NFS barrier (like Mako)
+  auto& benchCfg = BenchmarkConfig::getInstance();
+  std::cout << "\n[SYNC] Waiting for all shards to be ready (nshards="
+            << benchCfg.getNshards() << ", shard_idx=" << benchCfg.getShardIndex() << ")..." << std::endl;
+  benchCfg.waitMultiShardBarrier();
+  std::cout << "[SYNC] All shards ready!" << std::endl;
+
+  // Run benchmark or test mode
+  if (server_only) {
+    // Server-only mode: just wait for termination
+    std::cout << "\n[SERVER-ONLY MODE] Running as server only, no transactions will be sent." << std::endl;
+    std::cout << "[SERVER-ONLY MODE] Waiting for " << config.duration_sec << " seconds..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(config.duration_sec));
+    std::cout << "[SERVER-ONLY MODE] Done waiting." << std::endl;
+  } else if (test_one_txn) {
+    std::cout << "\n[TEST MODE] Sending ONE cross-shard transaction..." << std::endl;
+    bool success = client.TestOneCrossShardTransaction();
+    std::cout << "[TEST MODE] Transaction " << (success ? "SUCCEEDED" : "FAILED") << std::endl;
+
+    // Wait a bit for async processing to complete
+    std::cout << "[TEST MODE] Waiting 5 seconds for processing..." << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+  } else {
+    std::cout << "\n[TRACE] Step 6: Starting benchmark execution..." << std::endl;
+    std::cout << "[TRACE]   - Benchmark type: " << benchmark_type << std::endl;
+    std::cout << "[TRACE]   - Threads: " << config.num_threads << std::endl;
+    std::cout << "[TRACE]   - Duration: " << config.duration_sec << "s" << std::endl;
+    std::cout << "[TRACE] ========================================" << std::endl;
+
+    BenchmarkStats stats;
+    if (benchmark_type == "micro") {
+      stats = client.RunMicroBenchmark();
+    } else if (benchmark_type == "micro_single") {
+      stats = client.RunSingleShardMicroBenchmark();
+    } else if (benchmark_type == "tpcc") {
+      stats = client.RunTPCCBenchmark();
+    }
+
+    std::cout << "\n[TRACE] Step 6: Benchmark execution completed" << std::endl;
+
+    // Print results
+    stats.Print();
   }
 
-  // Print results
-  stats.Print();
-
   // Cleanup
+  std::cout << "Stopping Luigi helper threads..." << std::endl;
+  janus::luigi::stop_luigi_helper();
+  
+  std::cout << "Stopping transport..." << std::endl;
   luigi::stop_luigi_transport();
-  luigiOwd.stop();
+  
+    std::cout << "Stopping Luigi OWD..." << std::endl;
+    luigiOwd.stop();
+    
+    delete luigi_receiver;
 
-  return 0;
+    return 0;
+    
+  } catch (int e) {
+    std::cerr << "\n[MAIN] Caught int exception: " << e << " (likely Boost coroutine stack unwinding)\n";
+    std::cerr << "[MAIN] This is expected behavior for Boost coroutines\n";
+    return 0;  // Normal exit
+  } catch (const std::exception& e) {
+    std::cerr << "\n[MAIN] Exception: " << e.what() << std::endl;
+    return 1;
+  } catch (...) {
+    std::cerr << "\n[MAIN] Unknown exception\n";
+    return 1;
+  }
 }

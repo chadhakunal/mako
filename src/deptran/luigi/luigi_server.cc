@@ -6,6 +6,7 @@
 #include "deptran/__dep__.h"
 #include "deptran/rcc/tx.h"
 #include "deptran/s_main.h"
+#include "luigi_client.h"
 #include "luigi_common.h"
 #include "luigi_owd.h"
 #include "luigi_scheduler.h"
@@ -42,6 +43,13 @@ LuigiReceiver::~LuigiReceiver() { StopScheduler(); }
 size_t LuigiReceiver::ReceiveRequest(uint8_t reqType, char *reqBuf,
                                      char *respBuf) {
   size_t respLen = 0;
+  
+  static std::atomic<int> request_count{0};
+  int req_num = request_count.fetch_add(1);
+  
+  if (req_num % 50 == 0) {
+    Log_info("[RECEIVER] Request #%d: type=%d", req_num, reqType);
+  }
 
   switch (reqType) {
   case luigi::kLuigiDispatchReqType:
@@ -63,8 +71,12 @@ size_t LuigiReceiver::ReceiveRequest(uint8_t reqType, char *reqBuf,
     HandleWatermarkExchange(reqBuf, respBuf, respLen);
     break;
   default:
-    Log_warn("LuigiReceiver: Unrecognized request type: %d", reqType);
+    Log_warn("[RECEIVER] Unrecognized request type: %d", reqType);
     break;
+  }
+  
+  if (req_num % 50 == 0) {
+    Log_info("[RECEIVER] Request #%d: Handled, response len=%zu", req_num, respLen);
   }
 
   return respLen;
@@ -76,15 +88,22 @@ size_t LuigiReceiver::ReceiveRequest(uint8_t reqType, char *reqBuf,
 
 void LuigiReceiver::InitScheduler(uint32_t shard_id) {
   if (scheduler_ != nullptr) {
+    Log_info("[RECEIVER-INIT] Scheduler already initialized for shard %d", shard_id);
     return; // Already initialized
   }
 
+  Log_info("[RECEIVER-INIT] Creating SchedulerLuigi for shard %d", shard_id);
   scheduler_ = new SchedulerLuigi();
+  Log_info("[RECEIVER-INIT] SchedulerLuigi created successfully");
+  
   scheduler_->SetPartitionId(shard_id);
 
   // Set worker count based on warehouses (default 1)
   uint32_t worker_count = (config_.warehouses > 0) ? config_.warehouses : 1;
   scheduler_->SetWorkerCount(worker_count);
+  
+  Log_info("[RECEIVER-INIT] Scheduler configured: partition=%d, workers=%d", 
+           shard_id, worker_count);
 
   // Set scheduler reference in executor
   // This is required for Replicate() to work
@@ -101,20 +120,52 @@ void LuigiReceiver::InitScheduler(uint32_t shard_id) {
         return ReplicateEntry(entry);
       });
 
+  // TEMPORARILY DISABLED: Server-side LuigiClient for leader agreement
+  // Testing if FastTransport creation causes the crash
+  Log_info("[RECEIVER-INIT] Skipping server-side client creation for debugging");
+  scheduler_->SetLuigiClient(nullptr);
+  
+  /* ORIGINAL CODE - COMMENTED FOR DEBUGGING
+  Log_info("[RECEIVER-INIT] Creating dedicated client transport for leader agreement...");
+  std::string local_uri = config_.shard(shard_id, mako::convertCluster("localhost")).host;
+  FastTransport* coordinator_transport = new FastTransport(
+      config_.configFile,
+      local_uri,
+      "localhost",
+      1, 20,  // Request types 1-20
+      0,  // physPort
+      0,  // numa
+      shard_id,
+      shard_id + 100);  // Unique ID for coordinator client
+  
+  Log_info("[RECEIVER-INIT] Creating server-side LuigiClient for leader agreement...");
+  janus::LuigiClient* server_client = new janus::LuigiClient(
+      config_.configFile,  // Config file path
+      coordinator_transport,  // Dedicated client transport
+      shard_id + 1000);  // Unique client ID for server
+  scheduler_->SetLuigiClient(server_client);
+  Log_info("[RECEIVER-INIT] Server-side LuigiClient created with dedicated transport");
+  */
+
+  // Start scheduler threads
+  Log_info("[RECEIVER-INIT] Starting scheduler threads...");
+  scheduler_->Start();
+  Log_info("[RECEIVER-INIT] Scheduler threads started");
+
   // Transport and RPC setup handled externally (like Mako)
-  Log_info("Luigi scheduler initialized for shard %d with %d workers", shard_id,
-           worker_count);
+  Log_info("[RECEIVER-INIT] Luigi scheduler fully initialized for shard %d with %d workers", 
+           shard_id, worker_count);
 }
 
 void LuigiReceiver::StopScheduler() {
   // Transport cleanup handled externally
 
   if (scheduler_ != nullptr) {
+    uint32_t shard_id = scheduler_->GetPartitionId();
     scheduler_->Stop();
     delete scheduler_;
     scheduler_ = nullptr;
-    Log_info("Luigi scheduler stopped for shard %d",
-             scheduler_->GetPartitionId());
+    Log_info("Luigi scheduler stopped for shard %d", shard_id);
   }
 }
 
@@ -125,6 +176,11 @@ void LuigiReceiver::StopScheduler() {
 void LuigiReceiver::HandleDispatch(char *reqBuf, char *respBuf,
                                    size_t &respLen) {
   auto *req = reinterpret_cast<luigi::DispatchRequest *>(reqBuf);
+
+  if (req->txn_id % 50 == 0) {
+    Log_info("[RECEIVER-DISPATCH] TXN-%lu: HandleDispatch called (req_nr=%u, num_ops=%u)",
+             req->txn_id, req->req_nr, req->num_ops);
+  }
 
   // Parse operations from request
   std::vector<LuigiOp> ops;
@@ -169,6 +225,44 @@ void LuigiReceiver::HandleDispatch(char *reqBuf, char *respBuf,
     involved_shards.push_back(req->involved_shards[i]);
   }
 
+  // Extract working_set (TPC-C parameters)
+  // NOTE: working_set_data is NOT at req->working_set_data offset!
+  // It's serialized immediately AFTER the actual ops_data in the message.
+  // Calculate actual position: header + actual_ops_data_length
+  std::map<int32_t, std::string> working_set;
+  size_t header_size = offsetof(luigi::DispatchRequest, ops_data);
+  size_t ops_data_length = data_ptr - req->ops_data;  // Actual ops data consumed
+  char *ws_ptr = reinterpret_cast<char*>(req) + header_size + ops_data_length;
+
+  Log_info("[SERVER-DISPATCH] TXN-%lu: ws_ptr calculation: header_size=%zu, ops_data_length=%zu, ws_offset=%zu",
+           req->txn_id, header_size, ops_data_length, header_size + ops_data_length);
+  Log_info("[SERVER-DISPATCH] TXN-%lu: Parsing working_set with %u entries (ptr=%p, first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x)",
+           req->txn_id, req->num_working_set, (void*)ws_ptr,
+           (unsigned char)ws_ptr[0], (unsigned char)ws_ptr[1], (unsigned char)ws_ptr[2], (unsigned char)ws_ptr[3],
+           (unsigned char)ws_ptr[4], (unsigned char)ws_ptr[5], (unsigned char)ws_ptr[6], (unsigned char)ws_ptr[7],
+           (unsigned char)ws_ptr[8], (unsigned char)ws_ptr[9], (unsigned char)ws_ptr[10], (unsigned char)ws_ptr[11],
+           (unsigned char)ws_ptr[12], (unsigned char)ws_ptr[13], (unsigned char)ws_ptr[14], (unsigned char)ws_ptr[15]);
+  for (uint16_t i = 0; i < req->num_working_set && i < luigi::kMaxWorkingSetEntries; i++) {
+    // Read var_id (4 bytes)
+    int32_t var_id = *reinterpret_cast<int32_t *>(ws_ptr);
+    ws_ptr += sizeof(int32_t);
+
+    // Read value length (2 bytes)
+    uint16_t vlen = *reinterpret_cast<uint16_t *>(ws_ptr);
+    ws_ptr += sizeof(uint16_t);
+
+    // Read value
+    std::string value(ws_ptr, vlen);
+    ws_ptr += vlen;
+
+    working_set[var_id] = value;
+    if (i < 5 || i == req->num_working_set - 1) {  // Log first 5 and last
+      Log_info("  [SERVER-DISPATCH] TXN-%lu entry[%u]: var_id=%d, value='%s' (len=%u)",
+               req->txn_id, i, var_id, value.c_str(), vlen);
+    }
+  }
+  Log_info("[SERVER-DISPATCH] TXN-%lu: Parsed working_set size=%zu", req->txn_id, working_set.size());
+
   // Prepare response
   auto *resp = reinterpret_cast<luigi::DispatchResponse *>(respBuf);
   resp->req_nr = req->req_nr;
@@ -185,13 +279,26 @@ void LuigiReceiver::HandleDispatch(char *reqBuf, char *respBuf,
 
   uint64_t txn_id = req->txn_id;
 
+  if (txn_id % 50 == 0) {
+    Log_info("[RECEIVER-DISPATCH] TXN-%lu: Dispatching to scheduler (%zu ops, %zu shards)",
+             txn_id, ops.size(), involved_shards.size());
+  }
+
   // Dispatch to scheduler with async callback
   scheduler_->LuigiDispatchFromRequest(
-      txn_id, req->expected_time, ops, involved_shards,
+      txn_id, req->expected_time, req->txn_type, ops, working_set, involved_shards,
       [this, txn_id](int status, uint64_t commit_ts,
                      const std::vector<std::string> &read_results) {
+        if (txn_id % 50 == 0) {
+          Log_info("[RECEIVER-CALLBACK] TXN-%lu: Scheduler callback (status=%d, commit_ts=%lu)",
+                   txn_id, status, commit_ts);
+        }
         StoreResult(txn_id, status, commit_ts, read_results);
       });
+
+  if (txn_id % 50 == 0) {
+    Log_info("[RECEIVER-DISPATCH] TXN-%lu: Queued to scheduler, returning QUEUED status", txn_id);
+  }
 
   // Return QUEUED immediately
   resp->status = luigi::kStatusQueued;
@@ -288,13 +395,13 @@ void LuigiReceiver::StoreResult(uint64_t txn_id, int status, uint64_t commit_ts,
   Log_debug("Luigi result stored for txn %lu: status=%d, commit_ts=%lu", txn_id,
             result.status, commit_ts);
 
-  // Periodic cleanup
-  static int cleanup_counter = 0;
-  if (++cleanup_counter >= 100) {
-    cleanup_counter = 0;
-    lock.unlock();
-    CleanupStaleResults();
-  }
+  // DISABLED: Periodic cleanup (causes issues)
+  // static int cleanup_counter = 0;
+  // if (++cleanup_counter >= 100) {
+  //   cleanup_counter = 0;
+  //   lock.unlock();
+  //   CleanupStaleResults();
+  // }
 }
 
 void LuigiReceiver::CleanupStaleResults(int ttl_seconds) {
@@ -394,12 +501,22 @@ bool LuigiReceiver::ReplicateEntry(
 //=============================================================================
 
 LuigiServer::LuigiServer(int shard_idx, const std::string &benchmark_type)
-    : shard_idx_(shard_idx), benchmark_type_(benchmark_type) {
+    : shard_idx_(shard_idx), benchmark_type_(benchmark_type), config_(nullptr) {
   // Get config from BenchmarkConfig singleton
   auto &cfg = BenchmarkConfig::getInstance();
-  config_ = cfg.getConfig();
-
-  receiver_ = new LuigiReceiver(config_->configFile);
+  
+  // Use stored config file path to create our own Configuration object
+  // (Don't use cfg.getConfig() as it may be a dangling pointer to a temporary)
+  std::string config_file = cfg.getShardConfigFile();
+  if (config_file.empty()) {
+    Log_error("LuigiServer: config file path not set in BenchmarkConfig");
+    throw std::runtime_error("Config file path not available");
+  }
+  
+  // Create our own Configuration object that we own
+  config_ = new transport::Configuration(config_file);
+  
+  receiver_ = new LuigiReceiver(config_file);
 }
 
 LuigiServer::~LuigiServer() {
@@ -408,6 +525,10 @@ LuigiServer::~LuigiServer() {
     delete receiver_;
     receiver_ = nullptr;
   }
+  if (config_) {
+    delete config_;
+    config_ = nullptr;
+  }
 }
 
 void LuigiServer::Run() {
@@ -415,11 +536,10 @@ void LuigiServer::Run() {
 
   std::cout << "\n=== Luigi Server Initialization ===\n";
 
-  // 1. Initialize Luigi OWD service
-  std::cout << "Initializing Luigi OWD service...\n";
-  auto &owd = mako::luigi::LuigiOWD::getInstance();
-  owd.init(config_->configFile, cfg.getCluster(), shard_idx_, config_->nshards);
-  owd.start();
+  // NOTE: Luigi doesn't use Janus Config or TxLogServer
+  // This file (luigi_server.cc) is currently unused in client-only mode
+
+  // Note: Luigi OWD service should already be initialized in main before creating LuigiServer
 
   // 2. Create state machine based on benchmark_type
   std::cout << "Creating " << benchmark_type_ << " state machine...\n";
@@ -437,7 +557,6 @@ void LuigiServer::Run() {
         shard_idx_, 0, config_->nshards, 1);
   } else {
     Log_error("Unknown benchmark type: %s", benchmark_type_.c_str());
-    owd.stop();
     return;
   }
 
@@ -451,7 +570,6 @@ void LuigiServer::Run() {
   auto *scheduler = receiver_->GetScheduler();
   if (!scheduler) {
     Log_error("Failed to create scheduler");
-    owd.stop();
     return;
   }
 
@@ -483,7 +601,7 @@ void LuigiServer::Run() {
   // Cleanup
   std::cout << "\nShutting down Luigi server...\n";
   receiver_->StopScheduler();
-  owd.stop();
+  // Note: OWD is managed by main, not here
 
   Log_info("LuigiServer::Run() exiting for shard %d", shard_idx_);
 }

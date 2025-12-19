@@ -435,6 +435,9 @@ bool RrrRpcBackend::SendBatchToAll(TransportReceiver* src,
                                    uint16_t server_id,
                                    size_t resp_len,
                                    const std::map<int, std::pair<char*, size_t>>& data) {
+    Notice("[RRR-BACKEND] SendBatchToAll called: req_type=%d, server_id=%d, num_dests=%zu, src=%p",
+           req_type, server_id, data.size(), (void*)src);
+
     // Early return if stopping - don't start new RPC operations
     if (stop_) {
         Warning("RrrRpcBackend::SendBatchToAll: stop requested, not sending (req_type=%d)", req_type);
@@ -448,12 +451,20 @@ bool RrrRpcBackend::SendBatchToAll(TransportReceiver* src,
         char* raw_data = entry.second.first;
         size_t req_len = entry.second.second;
 
+        Notice("[RRR-BACKEND] Sending to shard %d, server_id=%d, req_len=%zu", shard_idx, server_id, req_len);
+
         auto client_opt = GetOrCreateClient(shard_idx, server_id);
-        if (client_opt.is_none()) continue;
+        if (client_opt.is_none()) {
+            Warning("[RRR-BACKEND] Failed to get client for shard %d, server_id=%d", shard_idx, server_id);
+            continue;
+        }
         rusty::Arc<rrr::Client> client = client_opt.unwrap();
 
         auto fu_result = client->begin_request(req_type);
-        if (fu_result.is_err()) continue;
+        if (fu_result.is_err()) {
+            Warning("[RRR-BACKEND] begin_request failed for shard %d", shard_idx);
+            continue;
+        }
         auto fu = fu_result.unwrap();
 
         // Write request data using client's << operator
@@ -466,7 +477,10 @@ bool RrrRpcBackend::SendBatchToAll(TransportReceiver* src,
 
         client->end_request();
         futures.push_back(std::move(fu));
+        Notice("[RRR-BACKEND] Request sent to shard %d, future added (total=%zu)", shard_idx, futures.size());
     }
+
+    Notice("[RRR-BACKEND] Sent %zu requests, now waiting for responses...", futures.size());
 
     // Wait for all responses
     for (auto& fu : futures) {
@@ -477,9 +491,11 @@ bool RrrRpcBackend::SendBatchToAll(TransportReceiver* src,
         }
 
         // Wait for response with timeout, checking stop flag periodically
+        Notice("[RRR-BACKEND] Waiting for RPC response (req_type=%d)", req_type);
         fu->timed_wait(1);
 
         if (fu->timed_out()) {
+            Warning("[RRR-BACKEND] RPC TIMED OUT (req_type=%d)", req_type);
             throw 1002;
         }
 
@@ -490,18 +506,22 @@ bool RrrRpcBackend::SendBatchToAll(TransportReceiver* src,
         }
 
         if (fu->get_error_code() != 0) {
-            Warning("RPC error: %d", fu->get_error_code());
+            Warning("[RRR-BACKEND] RPC ERROR: %d (req_type=%d)", fu->get_error_code(), req_type);
             continue;  // Arc auto-released
         }
 
         // Read response
+        Notice("[RRR-BACKEND] RPC SUCCESS, reading response (req_type=%d, resp_len=%zu)", req_type, resp_len);
         rrr::Marshal& resp_marshal = fu->get_reply();
         std::vector<char> resp_buffer(resp_len);
         resp_marshal.read(resp_buffer.data(), resp_len);
 
         // Deliver response (only if not stopping and src is valid)
         if (!stop_ && src) {
+            Notice("[RRR-BACKEND] Calling src->ReceiveResponse (req_type=%d, src=%p)", req_type, (void*)src);
             src->ReceiveResponse(req_type, resp_buffer.data());
+        } else {
+            Warning("[RRR-BACKEND] NOT calling ReceiveResponse: stop=%d, src=%p", stop_.load(), (void*)src);
         }
 
         // Arc auto-released at end of loop iteration
@@ -806,6 +826,34 @@ void RrrRpcBackend::RequestHandler(uint8_t req_type, rusty::Box<rrr::Request> re
     // Peek at request data to extract server ID
     std::vector<char> temp_buffer(req_size);
     req->m.read(temp_buffer.data(), req_size);
+
+    // DEBUG: Log first 16 bytes for Luigi Dispatch
+    if (req_type == 14) {  // kLuigiDispatchReqType
+        Log_info("[RRR-RPC] Read Luigi Dispatch request: req_size=%zu", req_size);
+        Log_info("  Bytes 0-15: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+                 (unsigned char)temp_buffer[0], (unsigned char)temp_buffer[1],
+                 (unsigned char)temp_buffer[2], (unsigned char)temp_buffer[3],
+                 (unsigned char)temp_buffer[4], (unsigned char)temp_buffer[5],
+                 (unsigned char)temp_buffer[6], (unsigned char)temp_buffer[7],
+                 (unsigned char)temp_buffer[8], (unsigned char)temp_buffer[9],
+                 (unsigned char)temp_buffer[10], (unsigned char)temp_buffer[11],
+                 (unsigned char)temp_buffer[12], (unsigned char)temp_buffer[13],
+                 (unsigned char)temp_buffer[14], (unsigned char)temp_buffer[15]);
+
+        // working_set_data should be at offset 66 (after header)
+        if (req_size > 66) {
+            Log_info("  Bytes 66-81 (ws_data): %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+                     (unsigned char)temp_buffer[66], (unsigned char)temp_buffer[67],
+                     (unsigned char)temp_buffer[68], (unsigned char)temp_buffer[69],
+                     (unsigned char)temp_buffer[70], (unsigned char)temp_buffer[71],
+                     (unsigned char)temp_buffer[72], (unsigned char)temp_buffer[73],
+                     (unsigned char)temp_buffer[74], (unsigned char)temp_buffer[75],
+                     (unsigned char)temp_buffer[76], (unsigned char)temp_buffer[77],
+                     (unsigned char)temp_buffer[78], (unsigned char)temp_buffer[79],
+                     (unsigned char)temp_buffer[80], (unsigned char)temp_buffer[81]);
+        }
+    }
+
     auto* target_server_id_reader = (TargetServerIDReader*)temp_buffer.data();
     uint16_t target_server_id = target_server_id_reader->targert_server_id;
 
@@ -818,8 +866,8 @@ void RrrRpcBackend::RequestHandler(uint8_t req_type, rusty::Box<rrr::Request> re
     // Find the appropriate helper queue
     auto it = backend->queue_holders_.find(target_server_id);
     if (it == backend->queue_holders_.end()) {
-        Warning("No helper queue found for server_id %d (available queues: %zu)",
-                target_server_id, backend->queue_holders_.size());
+        Warning("No helper queue for server_id %d (req_type=%d, available queues: %zu)",
+                target_server_id, req_type, backend->queue_holders_.size());
         // Print all available queue IDs
         for (auto& q : backend->queue_holders_) {
             Warning("  Available queue for server_id: %d", q.first);

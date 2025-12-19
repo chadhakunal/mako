@@ -25,9 +25,10 @@ LuigiDispatchBuilder::~LuigiDispatchBuilder() { delete request_; }
 
 LuigiDispatchBuilder::LuigiDispatchBuilder(
     LuigiDispatchBuilder &&other) noexcept
-    : request_(other.request_), msg_len_(other.msg_len_) {
+    : request_(other.request_), msg_len_(other.msg_len_), ws_len_(other.ws_len_) {
   other.request_ = nullptr;
   other.msg_len_ = 0;
+  other.ws_len_ = 0;
 }
 
 LuigiDispatchBuilder &
@@ -36,8 +37,10 @@ LuigiDispatchBuilder::operator=(LuigiDispatchBuilder &&other) noexcept {
     delete request_;
     request_ = other.request_;
     msg_len_ = other.msg_len_;
+    ws_len_ = other.ws_len_;
     other.request_ = nullptr;
     other.msg_len_ = 0;
+    other.ws_len_ = 0;
   }
   return *this;
 }
@@ -70,6 +73,11 @@ LuigiDispatchBuilder::SetInvolvedShards(const std::vector<uint32_t> &shards) {
   for (size_t i = 0; i < request_->num_involved_shards; i++) {
     request_->involved_shards[i] = static_cast<uint16_t>(shards[i]);
   }
+  return *this;
+}
+
+LuigiDispatchBuilder &LuigiDispatchBuilder::SetTxnType(uint32_t txn_type) {
+  request_->txn_type = txn_type;
   return *this;
 }
 
@@ -151,8 +159,64 @@ LuigiDispatchBuilder &LuigiDispatchBuilder::AddWrite(uint16_t table_id,
   return *this;
 }
 
+LuigiDispatchBuilder &LuigiDispatchBuilder::AddWorkingSetEntry(int32_t var_id, const std::string &value) {
+  if (request_->num_working_set >= luigi::kMaxWorkingSetEntries) {
+    Log_warn("LuigiDispatchBuilder: Max working_set entries reached, ignoring");
+    return *this;
+  }
+
+  // CRITICAL: Write to the actual serialization location, not request_->working_set_data!
+  // working_set is serialized immediately after ops_data in the message buffer.
+  // Location: request start + ops_data offset + actual ops length + current ws length
+  size_t header_size = offsetof(luigi::DispatchRequest, ops_data);
+  char *base = reinterpret_cast<char*>(request_);
+  char *ptr = base + header_size + msg_len_ + ws_len_;
+
+  // var_id (4 bytes)
+  *reinterpret_cast<int32_t *>(ptr) = var_id;
+  ptr += sizeof(int32_t);
+
+  // vlen (2 bytes)
+  uint16_t vlen = static_cast<uint16_t>(value.size());
+  *reinterpret_cast<uint16_t *>(ptr) = vlen;
+  ptr += sizeof(uint16_t);
+
+  // value
+  memcpy(ptr, value.data(), vlen);
+  ptr += vlen;
+
+  ws_len_ = ptr - (base + header_size + msg_len_);
+  request_->num_working_set++;
+
+  return *this;
+}
+
+LuigiDispatchBuilder &LuigiDispatchBuilder::SetWorkingSet(const std::map<int32_t, std::string> &working_set) {
+  Log_info("LuigiDispatchBuilder: SetWorkingSet called with %zu entries", working_set.size());
+  int i = 0;
+  for (const auto &[var_id, value] : working_set) {
+    if (i < 5 || i == (int)working_set.size() - 1) {  // Log first 5 and last
+      Log_info("  [CLIENT] entry[%d]: var_id=%d, value='%s' (len=%zu)",
+               i, var_id, value.c_str(), value.size());
+    }
+    AddWorkingSetEntry(var_id, value);
+    i++;
+  }
+  Log_info("LuigiDispatchBuilder: Serialized %u working_set entries, ws_len=%zu (first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x)",
+           request_->num_working_set, ws_len_,
+           (unsigned char)request_->working_set_data[0], (unsigned char)request_->working_set_data[1],
+           (unsigned char)request_->working_set_data[2], (unsigned char)request_->working_set_data[3],
+           (unsigned char)request_->working_set_data[4], (unsigned char)request_->working_set_data[5],
+           (unsigned char)request_->working_set_data[6], (unsigned char)request_->working_set_data[7],
+           (unsigned char)request_->working_set_data[8], (unsigned char)request_->working_set_data[9],
+           (unsigned char)request_->working_set_data[10], (unsigned char)request_->working_set_data[11],
+           (unsigned char)request_->working_set_data[12], (unsigned char)request_->working_set_data[13],
+           (unsigned char)request_->working_set_data[14], (unsigned char)request_->working_set_data[15]);
+  return *this;
+}
+
 size_t LuigiDispatchBuilder::GetTotalSize() const {
-  return sizeof(luigi::DispatchRequest) - sizeof(request_->ops_data) + msg_len_;
+  return sizeof(luigi::DispatchRequest) - sizeof(request_->ops_data) - sizeof(request_->working_set_data) + msg_len_ + ws_len_;
 }
 
 //=============================================================================
@@ -172,8 +236,10 @@ LuigiClient::LuigiClient(const std::string &config_file, Transport *transport,
 }
 
 void LuigiClient::ReceiveResponse(uint8_t reqType, char *respBuf) {
+  Log_info("[LUIGI-CLIENT] ReceiveResponse called: reqType=%d", reqType);
   switch (reqType) {
   case luigi::kLuigiDispatchReqType:
+    Log_info("[LUIGI-CLIENT] Routing to HandleDispatchReply");
     HandleDispatchReply(respBuf);
     break;
   case luigi::kLuigiStatusReqType:
@@ -202,23 +268,26 @@ void LuigiClient::InvokeDispatch(
     ResponseCallback continuation, ErrorCallback error_continuation,
     uint32_t timeout) {
 
-  Log_debug("InvokeDispatch: num_shards=%zu", requests_per_shard.size());
+  if (txn_nr <= 10 || txn_nr % 50 == 0) {
+    Log_info("[LUIGI-CLIENT] TXN-%lu: InvokeDispatch for %zu shards", 
+             txn_nr, requests_per_shard.size());
+  }
 
   uint32_t req_id = ++last_req_id_;
   req_id *= 10;
 
-  // Get first shard's server_id for tracking
-  uint16_t server_id = 0;
-  if (!requests_per_shard.empty()) {
-    server_id =
-        requests_per_shard.begin()->second->GetRequest()->target_server_id;
-  }
+  // Use sender's partition ID (0 for benchmark client)
+  // This is used for RPC client connection tracking, NOT routing
+  uint16_t server_id = 0;  // Benchmark client acts as partition 0
 
   current_request_ = {"luigiDispatch", req_id,       txn_nr,
                       server_id,       continuation, error_continuation};
 
   // Build data to send per shard
+  // NOTE: Local shard handled directly via local_receiver_, remote via RPC
   std::map<int, std::pair<char *, size_t>> data_to_send;
+  int local_shard = BenchmarkConfig::getInstance().getShardIndex();
+  LuigiDispatchBuilder* local_builder = nullptr;
 
   for (auto &kv : requests_per_shard) {
     int shard_idx = kv.first;
@@ -227,28 +296,111 @@ void LuigiClient::InvokeDispatch(
     // Set request number
     builder->SetReqNr(req_id);
 
-    data_to_send[shard_idx] = {reinterpret_cast<char *>(builder->GetRequest()),
-                               builder->GetTotalSize()};
+    // Handle local shard directly
+    if (shard_idx == local_shard) {
+      local_builder = builder;  // Save for direct handling
+      if (txn_nr <= 10 || txn_nr % 50 == 0) {
+        Log_info("[LUIGI-CLIENT] TXN-%lu: Will handle local shard %d directly",
+                 txn_nr, shard_idx);
+      }
+      continue;
+    }
+
+    char* req_buf = reinterpret_cast<char *>(builder->GetRequest());
+    size_t req_size = builder->GetTotalSize();
+    data_to_send[shard_idx] = {req_buf, req_size};
+
+    if (txn_nr <= 10 || txn_nr % 50 == 0) {
+      Log_info("[LUIGI-CLIENT] TXN-%lu: Remote shard %d - req_buf=%p, size=%zu, bytes 66-81: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+               txn_nr, shard_idx, (void*)req_buf, req_size,
+               (unsigned char)req_buf[66], (unsigned char)req_buf[67],
+               (unsigned char)req_buf[68], (unsigned char)req_buf[69],
+               (unsigned char)req_buf[70], (unsigned char)req_buf[71],
+               (unsigned char)req_buf[72], (unsigned char)req_buf[73],
+               (unsigned char)req_buf[74], (unsigned char)req_buf[75],
+               (unsigned char)req_buf[76], (unsigned char)req_buf[77],
+               (unsigned char)req_buf[78], (unsigned char)req_buf[79],
+               (unsigned char)req_buf[80], (unsigned char)req_buf[81]);
+    }
+  }
+
+  // Handle local shard request directly (if any)
+  if (local_builder && local_receiver_) {
+    auto* req = local_builder->GetRequest();
+    if (txn_nr <= 10 || txn_nr % 50 == 0) {
+      Log_info("[LUIGI-CLIENT] TXN-%lu: Local shard - before call: num_working_set=%u, first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+               txn_nr, req->num_working_set,
+               (unsigned char)req->working_set_data[0], (unsigned char)req->working_set_data[1],
+               (unsigned char)req->working_set_data[2], (unsigned char)req->working_set_data[3],
+               (unsigned char)req->working_set_data[4], (unsigned char)req->working_set_data[5],
+               (unsigned char)req->working_set_data[6], (unsigned char)req->working_set_data[7],
+               (unsigned char)req->working_set_data[8], (unsigned char)req->working_set_data[9],
+               (unsigned char)req->working_set_data[10], (unsigned char)req->working_set_data[11],
+               (unsigned char)req->working_set_data[12], (unsigned char)req->working_set_data[13],
+               (unsigned char)req->working_set_data[14], (unsigned char)req->working_set_data[15]);
+    }
+
+    char resp_buf[sizeof(luigi::DispatchResponse)];
+    local_receiver_->ReceiveRequest(
+        luigi::kLuigiDispatchReqType,
+        reinterpret_cast<char*>(req),
+        resp_buf);
+    if (txn_nr <= 10 || txn_nr % 50 == 0) {
+      Log_info("[LUIGI-CLIENT] TXN-%lu: Local shard handled directly", txn_nr);
+    }
   }
 
   blocked_ = true;
   num_response_waiting_ = data_to_send.size();
 
-  // Send to all involved shards using mako's transport
+  if (data_to_send.empty()) {
+    // All local - no RPCs needed, just return success immediately
+    if (txn_nr <= 10 || txn_nr % 50 == 0) {
+      Log_info("[LUIGI-CLIENT] TXN-%lu: All local (handled), completing", txn_nr);
+    }
+    blocked_ = false;
+    num_response_waiting_ = 0;
+    if (continuation) {
+      continuation(nullptr);
+    }
+    return;
+  }
+
+  // IMPORTANT: The 3rd parameter to SendBatchRequestToAll is used for:
+  // 1. RPC client connection: Connects to remote_shard_base_port + server_id
+  // 2. NOT for routing on the remote side (that uses target_server_id in payload)
+  //
+  // The server transport is created with ID = warehouses + 5 + alpha (from rpc_setup.cc:91)
+  // For alpha=0: ID = 6 + 5 + 0 = 11
+  // So we must use the SAME ID to connect to the remote shard's server!
+  uint16_t connection_server_id = config_.warehouses + 5;  // Match server transport ID
+
+  if (txn_nr <= 10 || txn_nr % 50 == 0) {
+    Log_info("[LUIGI-CLIENT] TXN-%lu: Sending to %zu remote shards (conn_server_id=%u)",
+             txn_nr, data_to_send.size(), connection_server_id);
+  }
+
+  // Send to all involved REMOTE shards using mako's transport
   // Note: Using mako's transport API directly
   rpc_transport_->SendBatchRequestToAll(
-      nullptr, // receiver - not used for client sends
+      this, // receiver - responses will be routed to HandleDispatchReply
       luigi::kLuigiDispatchReqType,
-      config_.warehouses + 5 + server_id % TThread::get_num_erpc_server(),
+      connection_server_id,  // Use remote shard's partition ID for connection
       sizeof(luigi::DispatchResponse), data_to_send);
+      
+  if (txn_nr <= 10 || txn_nr % 50 == 0) {
+    Log_info("[LUIGI-CLIENT] TXN-%lu: RPC sent to %zu remote shards, waiting for responses",
+             txn_nr, data_to_send.size());
+  }
 }
 
 void LuigiClient::HandleDispatchReply(char *respBuf) {
   auto *resp = reinterpret_cast<luigi::DispatchResponse *>(respBuf);
 
-  Log_debug(
-      "Luigi dispatch reply: req_nr=%d, txn_id=%lu, status=%d, commit_ts=%lu",
-      resp->req_nr, resp->txn_id, resp->status, resp->commit_timestamp);
+  if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
+    Log_info("[LUIGI-CLIENT] TXN-%lu: Received dispatch reply (status=%d, commit_ts=%lu, responses_pending=%d)",
+             resp->txn_id, resp->status, resp->commit_timestamp, num_response_waiting_);
+  }
 
   if (resp->req_nr != current_request_.req_nr) {
     Log_debug("Received reply for wrong request; req_nr=%u, expected=%u",
@@ -268,6 +420,10 @@ void LuigiClient::HandleDispatchReply(char *respBuf) {
   if (num_response_waiting_ == 0) {
     blocked_ = false;
     current_request_.req_nr = 0;
+    
+    if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
+      Log_info("[LUIGI-CLIENT] TXN-%lu: All responses received, unblocked", resp->txn_id);
+    }
   }
 }
 
@@ -356,6 +512,7 @@ void LuigiClient::InvokeOwdPing(uint64_t txn_nr, int shard_idx,
       this->rpc_transport_->GetRequestBuf(sizeof(luigi::OwdPingRequest),
                                           sizeof(luigi::OwdPingResponse)));
 
+  // target_server_id for OWD ping - use par_id 0 (first partition in any shard)
   req->target_server_id = 0;
   req->req_nr = req_id;
   req->send_time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -365,8 +522,9 @@ void LuigiClient::InvokeOwdPing(uint64_t txn_nr, int shard_idx,
   blocked_ = true;
   num_response_waiting_ = 1;
 
+  // Send OWD ping to partition 0 of the target shard
   this->rpc_transport_->SendRequestToShard(this, luigi::kOwdPingReqType,
-                                           shard_idx, config_.warehouses + 5,
+                                           shard_idx, 0,  // server_id = 0 (first partition)
                                            sizeof(luigi::OwdPingRequest));
 }
 
@@ -410,11 +568,13 @@ void LuigiClient::InvokeDeadlinePropose(uint32_t target_shard, uint64_t tid,
                       error_continuation};
 
   luigi::DeadlineProposeRequest req;
-  req.target_server_id = target_shard;
+  // target_server_id must be a partition on the destination shard
+  // Use first partition of target shard (contiguous partitioning)
+  req.target_server_id = target_shard * config_.warehouses;  
   req.req_nr = req_id;
   req.tid = tid;
   req.proposed_ts = proposed_ts;
-  req.src_shard = 0;
+  req.src_shard = BenchmarkConfig::getInstance().getShardIndex();
   req.phase = phase;
 
   std::map<int, std::pair<char *, size_t>> data_to_send;
@@ -423,9 +583,13 @@ void LuigiClient::InvokeDeadlinePropose(uint32_t target_shard, uint64_t tid,
   blocked_ = true;
   num_response_waiting_ = 1;
 
+  uint16_t sender_rpc_id = config_.warehouses + 5;
+  Log_info("[LUIGI-CLIENT] Sending DeadlinePropose: target_shard=%u, target_server_id=%u, sender_rpc_id=%u",
+           target_shard, req.target_server_id, sender_rpc_id);
+  
   rpc_transport_->SendBatchRequestToAll(
       this, luigi::kDeadlineProposeReqType,
-      config_.warehouses + 5,
+      sender_rpc_id,
       sizeof(luigi::DeadlineProposeResponse), data_to_send);
 }
 
@@ -441,10 +605,11 @@ void LuigiClient::InvokeDeadlineConfirm(uint32_t target_shard, uint64_t tid,
                       error_continuation};
 
   luigi::DeadlineConfirmRequest req;
-  req.target_server_id = target_shard;
+  // target_server_id must be a partition on the destination shard
+  req.target_server_id = target_shard * config_.warehouses;
   req.req_nr = req_id;
   req.tid = tid;
-  req.src_shard = 0;
+  req.src_shard = BenchmarkConfig::getInstance().getShardIndex();
   req.new_ts = new_ts;
 
   std::map<int, std::pair<char *, size_t>> data_to_send;
@@ -470,9 +635,10 @@ void LuigiClient::InvokeWatermarkExchange(
                       error_continuation};
 
   luigi::WatermarkExchangeRequest req;
-  req.target_server_id = target_shard;
+  // target_server_id must be a partition on the destination shard
+  req.target_server_id = target_shard * config_.warehouses;
   req.req_nr = req_id;
-  req.src_shard = 0;
+  req.src_shard = BenchmarkConfig::getInstance().getShardIndex();
   req.num_watermarks = std::min(watermarks.size(), size_t(32));
 
   for (size_t i = 0; i < req.num_watermarks; i++) {

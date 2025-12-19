@@ -93,7 +93,7 @@ void erpc_server(
     config->configFile,
     local_uri,
     cluster,
-    1, 12,
+    1, 20,  // Extended range to include Luigi types (14-19)
     0, // physPort
     0, // numa node
     running_shardIndex,

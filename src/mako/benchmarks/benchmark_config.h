@@ -103,6 +103,7 @@ class BenchmarkConfig {
       int is_replicated_;
       string paxos_proc_name_;
       std::vector<std::string> paxos_config_file_;
+      std::string shard_config_file_;  // Path to shard config YAML
       
       // Atomic variables for Paxos termination tracking
       std::atomic<int> end_received_;
@@ -185,6 +186,7 @@ class BenchmarkConfig {
       // @safe
       int getLeaderConfig() const { return paxos_proc_name_==mako::LOCALHOST_CENTER; }
       const std::vector<std::string>& getPaxosConfigFile() const { return paxos_config_file_; }
+      const std::string& getShardConfigFile() const { return shard_config_file_; }
       
       // Runtime TPCC wiring getters
       std::vector<FastTransport*>& getServerTransports() { return server_transports_; }
@@ -228,6 +230,7 @@ class BenchmarkConfig {
       void setIsReplicated(int replicated) { is_replicated_ = replicated; }
       void setPaxosProcName(std::string paxos_proc_name) { paxos_proc_name_ = paxos_proc_name; setCluster(paxos_proc_name); setClusterRole(mako::convertCluster(paxos_proc_name));}
       void setPaxosConfigFile(const std::vector<std::string>& paxos_config_file) { paxos_config_file_ = paxos_config_file; }
+      void setShardConfigFile(const std::string& shard_config_file) { shard_config_file_ = shard_config_file; }
       
       // Getters and setters for Paxos termination tracking
       int getEndReceived() const { return end_received_.load(); }

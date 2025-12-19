@@ -23,6 +23,7 @@ constexpr size_t kMaxOps = 32;
 constexpr size_t kMaxShards = 16; // Max shards involved in one txn
 constexpr size_t kMaxKeyLength = 128;
 constexpr size_t kMaxValueLength = 512;
+constexpr size_t kMaxWorkingSetEntries = 64; // Max working_set entries for TPC-C
 
 // Request types (must match mako::common.h for transport compatibility)
 constexpr uint8_t kLuigiDispatchReqType = 14;
@@ -55,11 +56,15 @@ struct DispatchRequest {
   uint32_t req_nr;              // Request number (for matching response)
   uint64_t txn_id;              // Unique transaction ID
   uint64_t expected_time;       // Timestamp at which transaction should execute
+  uint32_t txn_type;            // Transaction type (TPC-C: NEW_ORDER, PAYMENT, etc.)
   uint16_t num_ops;             // Number of operations in this dispatch
   uint16_t num_involved_shards; // Number of shards involved in this txn
+  uint16_t num_working_set;     // Number of working_set entries (TPC-C parameters)
   uint16_t involved_shards[kMaxShards]; // List of all involved shard IDs
   // Each op: [table_id(2) | op_type(1) | klen(2) | vlen(2) | key | value]
   char ops_data[kMaxOps * (kMaxKeyLength + kMaxValueLength + 8)];
+  // Working set: [var_id(4) | vlen(2) | value]
+  char working_set_data[kMaxWorkingSetEntries * (sizeof(int32_t) + sizeof(uint16_t) + kMaxValueLength)];
 };
 
 struct DispatchResponse {

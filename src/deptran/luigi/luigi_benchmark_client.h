@@ -67,6 +67,11 @@ struct BenchmarkStats {
     printf("P99 Latency:       %.2f us\n", p99_latency_us);
     printf("P99.9 Latency:     %.2f us\n", p999_latency_us);
     printf("========================================\n");
+    
+    // Output Mako-compatible keywords for test scripts
+    printf("agg_persist_throughput: %.2f txns/sec\n", throughput_tps);
+    double abort_ratio = total_txns > 0 ? 100.0 * aborted_txns / total_txns : 0.0;
+    printf("NewOrder_remote_abort_ratio: %.2f%%\n", abort_ratio);
   }
 };
 
@@ -134,6 +139,12 @@ public:
 
   // Stop benchmark early
   void Stop();
+
+  // TEST: Send one hardcoded cross-shard transaction
+  bool TestOneCrossShardTransaction();
+
+  // Get the underlying LuigiClient (for wiring to scheduler)
+  janus::LuigiClient* GetLuigiClient() { return luigi_client_.get(); }
 
 private:
   // Worker thread function (closed-loop)
@@ -207,7 +218,7 @@ CreateDefaultTPCCConfig(int num_shards, int warehouses_per_shard = 1) {
       warehouses_per_shard; // Note: assigning to num_warehouses
   cfg.num_districts_per_wh = 10;
   cfg.num_customers_per_district = 3000;
-  cfg.num_items = 100000;
+  cfg.num_items = 1000;  // Reduced for testing (was 100000)
   // Standard TPC-C mix
   cfg.new_order_weight = 45;
   cfg.payment_weight = 43;

@@ -23,6 +23,12 @@ LuigiExecutor::~LuigiExecutor() {}
 //=============================================================================
 
 void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
+  try {
+  // ALWAYS log for first 10 transactions or every 50th
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: Execute called", entry->tid_);
+  }
+
   int status = 0; // SUCCESS
   uint64_t commit_ts = entry->proposed_ts_;
 
@@ -30,6 +36,10 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
   // Step 1: Multi-shard detection
   //-------------------------------------------------------------------------
   bool is_multi_shard = IsMultiShard(entry);
+  
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: Multi-shard=%d", entry->tid_, is_multi_shard);
+  }
 
   //-------------------------------------------------------------------------
   // Step 2: For multi-shard txns, handle agreement state machine
@@ -47,19 +57,16 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
     switch (agree_status) {
     case LUIGI_AGREE_INIT:
       //-------------------------------------------------------------------
-      // First time seeing this txn - initiate agreement
-      // This broadcasts our proposal and returns immediately.
-      // When all proposals are received, UpdateDeadlineRecord() will
-      // determine the case and re-enqueue the txn to ready_queue_.
+      // TEMPORARY: Skip agreement for debugging - mark as complete immediately
       //-------------------------------------------------------------------
-      Log_info("Luigi Execute: txn %lu initiating agreement (async)",
+      Log_info("Luigi Execute: txn %lu SKIPPING agreement for debugging",
                entry->tid_);
-      if (scheduler_ != nullptr) {
-        scheduler_->InitiateAgreement(entry);
-      }
-      // Don't execute yet - wait for agreement to complete asynchronously
-      entry->exec_status_.store(LUIGI_EXEC_INIT);
-      return;
+      entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
+      entry->agreed_ts_ = entry->proposed_ts_;
+      entry->ts_agreed_.store(true);
+      commit_ts = entry->proposed_ts_;
+      // Fall through to execution
+      break;
 
     case LUIGI_AGREE_FLUSHING:
       //-------------------------------------------------------------------
@@ -123,36 +130,60 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
   // Step 3: Execute all operations
   // Choose between callback mode (Mako) and state machine mode (Tiga-style)
   //-------------------------------------------------------------------------
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: Executing operations (mode=%s)",
+             entry->tid_, (use_state_machine_ && state_machine_) ? "state_machine" : "callbacks");
+  }
+  
   if (use_state_machine_ && state_machine_) {
     status = ExecuteViaStateMachine(entry);
   } else {
     status = ExecuteAllOps(entry);
   }
+  
   if (status != 0) {
-    Log_error("Luigi Execute: Operation execution failed for txn %lu",
-              entry->tid_);
+    Log_error("[EXECUTOR] TXN-%lu: Operation execution FAILED (status=%d)", entry->tid_, status);
     goto done;
+  }
+  
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: Operations executed successfully", entry->tid_);
   }
 
   //-------------------------------------------------------------------------
   // Step 4: Trigger replication (background Paxos)
+  // TEMPORARILY DISABLED for debugging
   //-------------------------------------------------------------------------
   // Note: We trigger replication even if not all reads succeeded
   // This matches Mako's behavior - replication happens for committed txns
-  status = TriggerReplication(entry);
-  if (status != 0) {
-    Log_error("Luigi Execute: Replication trigger failed for txn %lu",
-              entry->tid_);
-    // Don't abort - replication failure is handled by Paxos recovery
-    status = 0; // Reset status, txn still committed locally
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: SKIPPING replication for debugging", entry->tid_);
   }
+  // DISABLED: status = TriggerReplication(entry);
 
 done:
   entry->exec_status_.store(LUIGI_EXEC_COMPLETE);
 
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: About to call reply callback (has_cb=%d)",
+             entry->tid_, entry->reply_cb_ != nullptr);
+  }
   // Call reply callback
   if (entry->reply_cb_) {
     entry->reply_cb_(status, commit_ts, entry->read_results_);
+  }
+  if (entry->tid_ <= 10 || entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR] TXN-%lu: Reply callback completed", entry->tid_);
+  }
+  } catch (int e) {
+    Log_error("[EXECUTOR] TXN-%lu: Caught int exception %d", entry->tid_, e);
+    throw; // Re-throw to be caught by ExecTd
+  } catch (const std::exception& e) {
+    Log_error("[EXECUTOR] TXN-%lu: Caught std::exception: %s", entry->tid_, e.what());
+    throw;
+  } catch (...) {
+    Log_error("[EXECUTOR] TXN-%lu: Caught unknown exception", entry->tid_);
+    throw;
   }
 }
 
@@ -356,12 +387,21 @@ int LuigiExecutor::TriggerReplication(std::shared_ptr<LuigiLogEntry> entry) {
   // Extract worker ID (bits 63-48 of txn_id)
   uint32_t worker_id = (uint32_t)((entry->tid_ >> 48) & 0xFFFF);
 
+  if (entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR-REPLICATE] TXN-%lu: Triggering replication (worker_id=%u)",
+             entry->tid_, worker_id);
+  }
+
   // Use scheduler's Replication layer
   if (scheduler_) {
     scheduler_->Replicate(worker_id, entry);
   } else {
-    Log_error("Luigi TriggerReplication: scheduler not set!");
+    Log_error("[EXECUTOR-REPLICATE] TXN-%lu: Scheduler not set!", entry->tid_);
     return -1;
+  }
+  
+  if (entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR-REPLICATE] TXN-%lu: Replication triggered", entry->tid_);
   }
 
   // NOTE: In the original Mako code, there was a replication_cb_.
@@ -407,8 +447,12 @@ int LuigiExecutor::TriggerReplication(std::shared_ptr<LuigiLogEntry> entry) {
 int LuigiExecutor::ExecuteViaStateMachine(
     std::shared_ptr<LuigiLogEntry> entry) {
   if (!state_machine_) {
-    Log_error("Luigi ExecuteViaStateMachine: state machine not set!");
+    Log_error("[EXECUTOR-SM] TXN-%lu: State machine not set!", entry->tid_);
     return -1;
+  }
+  
+  if (entry->tid_ % 50 == 0) {
+    Log_info("[EXECUTOR-SM] TXN-%lu: Executing via state machine", entry->tid_);
   }
 
   // Filter operations for local keys (same logic as ExecuteAllOps)

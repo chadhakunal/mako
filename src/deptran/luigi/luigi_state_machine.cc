@@ -1,7 +1,10 @@
 #include "luigi_state_machine.h"
 #include "__dep__.h"
-#include "tpcc_constants.h"
 #include "tpcc_helpers.h"
+
+// IMPORTANT: Use tpcc_txn_generator.h instead of tpcc_constants.h
+// to match what the generator sends (different var ID definitions!)
+#include "tpcc_txn_generator.h"
 
 #include <algorithm>
 #include <chrono>
@@ -274,9 +277,13 @@ void LuigiTPCCStateMachine::PopulateData() {
   auto *txn = txn_mgr_.start(0);
 
   for (uint32_t w = 0; w < num_warehouses_; w++) {
-    if (KeyToShard("warehouse_" + std::to_string(w)) != shard_id_) {
-      continue; // This warehouse belongs to another shard
-    }
+    // TEMPORARY: Create all warehouses on all shards for testing
+    // TODO: Properly partition warehouses based on generator's shard->warehouse mapping
+    // if (KeyToShard("warehouse_" + std::to_string(w)) != shard_id_) {
+    //   continue; // This warehouse belongs to another shard
+    // }
+
+    Log_info("[POPULATE] Shard %u: Creating warehouse %u", shard_id_, w);
 
     // Create warehouse row
     std::vector<mdb::Value> row_data = {
@@ -310,6 +317,60 @@ void LuigiTPCCStateMachine::PopulateData() {
       };
       auto *drow = mdb::Row::create(tbl_district_->schema(), dist_data);
       txn->insert_row(tbl_district_, drow);
+
+      // Create customers for this district
+      for (uint32_t c = 0; c < num_customers_per_district_; c++) {
+        std::vector<mdb::Value> cust_data = {
+            mdb::Value((i32)c),                            // c_id
+            mdb::Value((i32)d),                            // c_d_id
+            mdb::Value((i32)w),                            // c_w_id
+            mdb::Value("Customer_" + std::to_string(c)),   // c_first
+            mdb::Value("OE"),                              // c_middle
+            mdb::Value("CustomerLast_" + std::to_string(c)), // c_last
+            mdb::Value("CStreet1"),                        // c_street_1
+            mdb::Value("CStreet2"),                        // c_street_2
+            mdb::Value("CCity"),                           // c_city
+            mdb::Value("ST"),                              // c_state
+            mdb::Value("12345"),                           // c_zip
+            mdb::Value("1234567890"),                      // c_phone
+            mdb::Value("2025-01-01"),                      // c_since (STR)
+            mdb::Value("GC"),                              // c_credit
+            mdb::Value(50000.0),                           // c_credit_lim
+            mdb::Value(0.05),                              // c_discount
+            mdb::Value(-10.0),                             // c_balance
+            mdb::Value(10.0),                              // c_ytd_payment
+            mdb::Value((i32)1),                            // c_payment_cnt
+            mdb::Value((i32)0),                            // c_delivery_cnt
+            mdb::Value("CustomerData")                     // c_data
+        };
+        auto *crow = mdb::Row::create(tbl_customer_->schema(), cust_data);
+        txn->insert_row(tbl_customer_, crow);
+      }
+    }
+
+    // Create stock for all items in this warehouse
+    for (uint32_t i = 0; i < num_items_; i++) {
+      std::vector<mdb::Value> stock_data = {
+          mdb::Value((i32)i),   // s_i_id
+          mdb::Value((i32)w),   // s_w_id
+          mdb::Value((i32)100), // s_quantity (initial stock)
+          mdb::Value("dist_01"), // s_dist_01
+          mdb::Value("dist_02"), // s_dist_02
+          mdb::Value("dist_03"), // s_dist_03
+          mdb::Value("dist_04"), // s_dist_04
+          mdb::Value("dist_05"), // s_dist_05
+          mdb::Value("dist_06"), // s_dist_06
+          mdb::Value("dist_07"), // s_dist_07
+          mdb::Value("dist_08"), // s_dist_08
+          mdb::Value("dist_09"), // s_dist_09
+          mdb::Value("dist_10"), // s_dist_10
+          mdb::Value((i32)0),    // s_ytd
+          mdb::Value((i32)0),    // s_order_cnt
+          mdb::Value((i32)0),    // s_remote_cnt
+          mdb::Value("StockData") // s_data
+      };
+      auto *srow = mdb::Row::create(tbl_stock_->schema(), stock_data);
+      txn->insert_row(tbl_stock_, srow);
     }
   }
 
@@ -337,15 +398,15 @@ bool LuigiTPCCStateMachine::Execute(
 
   // Dispatch to appropriate TPC-C transaction handler
   switch (txn_type) {
-  case LUIGI_TXN_NEW_ORDER:
+  case LUIGI_TXN_TPCC_NEW_ORDER:
     return ExecuteNewOrder(working_set, output, txn_id);
-  case LUIGI_TXN_PAYMENT:
+  case LUIGI_TXN_TPCC_PAYMENT:
     return ExecutePayment(working_set, output, txn_id);
-  case LUIGI_TXN_ORDER_STATUS:
+  case LUIGI_TXN_TPCC_ORDER_STATUS:
     return ExecuteOrderStatus(working_set, output, txn_id);
-  case LUIGI_TXN_DELIVERY:
+  case LUIGI_TXN_TPCC_DELIVERY:
     return ExecuteDelivery(working_set, output, txn_id);
-  case LUIGI_TXN_STOCK_LEVEL:
+  case LUIGI_TXN_TPCC_STOCK_LEVEL:
     return ExecuteStockLevel(working_set, output, txn_id);
   default:
     Log_warn("Unknown TPC-C transaction type: %u", txn_type);
@@ -394,21 +455,57 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
     const std::map<int32_t, std::string> &working_set,
     std::map<std::string, std::string> *output, uint64_t txn_id) {
 
+  Log_info("[STATE-MACHINE] TXN-%lu ExecuteNewOrder: working_set size=%zu", txn_id, working_set.size());
+
+  // Debug: print all working_set keys
+  for (const auto &[key, value] : working_set) {
+    Log_debug("  [STATE-MACHINE] working_set[%d] = '%s'", key, value.c_str());
+  }
+
   // Extract parameters from working_set
-  int32_t w_id = std::stoi(working_set.at(TPCC_VAR_W_ID));
-  int32_t d_id = std::stoi(working_set.at(TPCC_VAR_D_ID));
-  int32_t c_id = std::stoi(working_set.at(TPCC_VAR_C_ID));
-  int32_t ol_cnt = std::stoi(working_set.at(TPCC_VAR_OL_CNT));
+  int32_t w_id, d_id, c_id, ol_cnt;
+  try {
+    w_id = std::stoi(working_set.at(TPCC_VAR_W_ID));
+  } catch (...) {
+    Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_W_ID (%d) not in working_set!", txn_id, TPCC_VAR_W_ID);
+    throw;
+  }
+  try {
+    d_id = std::stoi(working_set.at(TPCC_VAR_D_ID));
+  } catch (...) {
+    Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_D_ID (%d) not in working_set!", txn_id, TPCC_VAR_D_ID);
+    throw;
+  }
+  try {
+    // NewOrder uses TPCC_VAR_C_ID for customer ID
+    c_id = std::stoi(working_set.at(TPCC_VAR_C_ID));
+  } catch (...) {
+    Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_C_ID (%d) not in working_set!", txn_id, TPCC_VAR_C_ID);
+    throw;
+  }
+  try {
+    // NewOrder uses TPCC_VAR_OL_CNT for order line count
+    ol_cnt = std::stoi(working_set.at(TPCC_VAR_OL_CNT));
+  } catch (...) {
+    Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_OL_CNT (%d) not in working_set!", txn_id, TPCC_VAR_OL_CNT);
+    throw;
+  }
+
+  Log_info("[STATE-MACHINE] TXN-%lu ExecuteNewOrder: w_id=%d, d_id=%d, c_id=%d, ol_cnt=%d",
+           txn_id, w_id, d_id, c_id, ol_cnt);
 
   auto *txn = txn_mgr_.start(txn_id);
 
   // 1. Read warehouse
+  Log_info("[STATE-MACHINE] TXN-%lu: Querying warehouse w_id=%d", txn_id, w_id);
   mdb::ResultSet w_rs = txn->query(tbl_warehouse_, mdb::Value(w_id));
   mdb::Row *w_row = w_rs.has_next() ? w_rs.next() : nullptr;
   if (!w_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: Warehouse %d NOT FOUND!", txn_id, w_id);
     delete txn;
     return false;
   }
+  Log_info("[STATE-MACHINE] TXN-%lu: Warehouse %d found", txn_id, w_id);
 
   mdb::Value w_tax_val;
   txn->read_column(w_row, tbl_warehouse_->schema()->get_column_id("w_tax"),
@@ -420,12 +517,15 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
   mdb::MultiBlob d_mb(2);
   d_mb[0] = d_key_vals[0].get_blob();
   d_mb[1] = d_key_vals[1].get_blob();
+  Log_info("[STATE-MACHINE] TXN-%lu: Querying district d_id=%d, w_id=%d", txn_id, d_id, w_id);
   mdb::ResultSet d_rs = txn->query(tbl_district_, d_mb);
   mdb::Row *d_row = d_rs.has_next() ? d_rs.next() : nullptr;
   if (!d_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: District (d_id=%d, w_id=%d) NOT FOUND!", txn_id, d_id, w_id);
     delete txn;
     return false;
   }
+  Log_info("[STATE-MACHINE] TXN-%lu: District found", txn_id);
 
   mdb::Value d_tax_val, d_next_o_id_val;
   txn->read_column(d_row, tbl_district_->schema()->get_column_id("d_tax"),
@@ -447,12 +547,15 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
   c_mb[0] = c_key_vals[0].get_blob();
   c_mb[1] = c_key_vals[1].get_blob();
   c_mb[2] = c_key_vals[2].get_blob();
+  Log_info("[STATE-MACHINE] TXN-%lu: Querying customer c_id=%d, d_id=%d, w_id=%d", txn_id, c_id, d_id, w_id);
   mdb::ResultSet c_rs = txn->query(tbl_customer_, c_mb);
   mdb::Row *c_row = c_rs.has_next() ? c_rs.next() : nullptr;
   if (!c_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: Customer (c_id=%d, d_id=%d, w_id=%d) NOT FOUND!", txn_id, c_id, d_id, w_id);
     delete txn;
     return false;
   }
+  Log_info("[STATE-MACHINE] TXN-%lu: Customer found", txn_id);
 
   mdb::Value c_discount_val;
   txn->read_column(c_row, tbl_customer_->schema()->get_column_id("c_discount"),
@@ -464,9 +567,28 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
   double total_amount = 0.0;
 
   for (int32_t i = 0; i < ol_cnt; i++) {
-    int32_t ol_i_id = std::stoi(working_set.at(TPCC_VAR_I_ID(i)));
-    int32_t ol_supply_w_id = std::stoi(working_set.at(TPCC_VAR_S_W_ID(i)));
-    int32_t ol_quantity = std::stoi(working_set.at(TPCC_VAR_OL_QUANTITY(i)));
+    int32_t ol_i_id, ol_supply_w_id, ol_quantity;
+    try {
+      ol_i_id = std::stoi(working_set.at(TPCC_VAR_I_ID(i)));
+    } catch (...) {
+      Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_I_ID(%d) = %d not in working_set!", txn_id, i, TPCC_VAR_I_ID(i));
+      throw;
+    }
+    try {
+      ol_supply_w_id = std::stoi(working_set.at(TPCC_VAR_S_W_ID(i)));
+    } catch (...) {
+      Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_S_W_ID(%d) = %d not in working_set!", txn_id, i, TPCC_VAR_S_W_ID(i));
+      throw;
+    }
+    try {
+      ol_quantity = std::stoi(working_set.at(TPCC_VAR_OL_QUANTITY(i)));
+    } catch (...) {
+      Log_error("[STATE-MACHINE] TXN-%lu: TPCC_VAR_OL_QUANTITY(%d) = %d not in working_set!", txn_id, i, TPCC_VAR_OL_QUANTITY(i));
+      throw;
+    }
+
+    Log_info("[STATE-MACHINE] TXN-%lu: Processing item[%d]: ol_i_id=%d, ol_supply_w_id=%d, ol_quantity=%d",
+             txn_id, i, ol_i_id, ol_supply_w_id, ol_quantity);
 
     if (ol_supply_w_id != w_id) {
       all_local = false;
@@ -480,10 +602,11 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
       // Luigi's single-phase execution doesn't support rollback after
       // coordination For research purposes, treat as successful no-op (skip
       // this item)
-      Log_warn("Invalid item %d in NewOrder - skipping (Luigi single-phase)",
-               ol_i_id);
+      Log_warn("[STATE-MACHINE] TXN-%lu: Invalid item %d in NewOrder - skipping (Luigi single-phase)",
+               txn_id, ol_i_id);
       continue; // Skip this item and continue with next
     }
+    Log_info("[STATE-MACHINE] TXN-%lu: Item %d found", txn_id, ol_i_id);
 
     mdb::Value i_price_val;
     txn->read_column(i_row, tbl_item_->schema()->get_column_id("i_price"),
@@ -496,12 +619,15 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
     mdb::MultiBlob s_mb(2);
     s_mb[0] = s_key_vals[0].get_blob();
     s_mb[1] = s_key_vals[1].get_blob();
+    Log_info("[STATE-MACHINE] TXN-%lu: Querying stock i_id=%d, w_id=%d", txn_id, ol_i_id, ol_supply_w_id);
     mdb::ResultSet s_rs = txn->query(tbl_stock_, s_mb);
     mdb::Row *s_row = s_rs.has_next() ? s_rs.next() : nullptr;
     if (!s_row) {
+      Log_error("[STATE-MACHINE] TXN-%lu: Stock (i_id=%d, w_id=%d) NOT FOUND!", txn_id, ol_i_id, ol_supply_w_id);
       delete txn;
       return false;
     }
+    Log_info("[STATE-MACHINE] TXN-%lu: Stock found", txn_id);
 
     mdb::Value s_quantity_val, s_ytd_val, s_order_cnt_val, s_remote_cnt_val;
     txn->read_column(s_row, tbl_stock_->schema()->get_column_id("s_quantity"),
@@ -513,10 +639,13 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
     txn->read_column(s_row, tbl_stock_->schema()->get_column_id("s_remote_cnt"),
                      &s_remote_cnt_val);
 
+    Log_info("[STATE-MACHINE] TXN-%lu: Reading stock values...", txn_id);
     int32_t s_quantity = s_quantity_val.get_i32();
     int32_t s_ytd = s_ytd_val.get_i32();
     int32_t s_order_cnt = s_order_cnt_val.get_i32();
     int32_t s_remote_cnt = s_remote_cnt_val.get_i32();
+    Log_info("[STATE-MACHINE] TXN-%lu: Stock values: quantity=%d, ytd=%d, order_cnt=%d, remote_cnt=%d",
+             txn_id, s_quantity, s_ytd, s_order_cnt, s_remote_cnt);
 
     // Update stock quantity (TPC-C wraparound logic)
     if (s_quantity >= ol_quantity + 10) {
@@ -525,6 +654,7 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
       s_quantity = s_quantity - ol_quantity + 91;
     }
 
+    Log_info("[STATE-MACHINE] TXN-%lu: Writing stock updates...", txn_id);
     txn->write_column(s_row, tbl_stock_->schema()->get_column_id("s_quantity"),
                       mdb::Value(s_quantity));
     txn->write_column(s_row, tbl_stock_->schema()->get_column_id("s_ytd"),
@@ -538,56 +668,101 @@ bool LuigiTPCCStateMachine::ExecuteNewOrder(
                         mdb::Value(s_remote_cnt + 1));
     }
 
+    Log_info("[STATE-MACHINE] TXN-%lu: Stock writes complete", txn_id);
+
     // Calculate amount
     double ol_amount = ol_quantity * i_price;
     total_amount += ol_amount;
 
+    Log_info("[STATE-MACHINE] TXN-%lu: Creating order_line row (item %d)", txn_id, i);
     // Insert order_line
     std::vector<mdb::Value> ol_data = {
-        mdb::Value(d_next_o_id), mdb::Value(d_id),
-        mdb::Value(w_id),        mdb::Value(i + 1),
-        mdb::Value(ol_i_id),     mdb::Value(ol_supply_w_id),
-        mdb::Value(ol_quantity), mdb::Value(ol_amount),
-        mdb::Value("dist_info")};
+        mdb::Value(d_next_o_id),     // ol_o_id
+        mdb::Value(d_id),            // ol_d_id
+        mdb::Value(w_id),            // ol_w_id
+        mdb::Value(i + 1),           // ol_number
+        mdb::Value(ol_i_id),         // ol_i_id
+        mdb::Value(ol_supply_w_id),  // ol_supply_w_id
+        mdb::Value(""),              // ol_delivery_d (empty for new orders)
+        mdb::Value(ol_quantity),     // ol_quantity
+        mdb::Value(ol_amount),       // ol_amount
+        mdb::Value("dist_info")      // ol_dist_info
+    };
     auto *ol_row = mdb::Row::create(tbl_order_line_->schema(), ol_data);
+    if (!ol_row) {
+      Log_error("[STATE-MACHINE] TXN-%lu: Failed to create order_line row", txn_id);
+      delete txn;
+      return false;
+    }
+    Log_info("[STATE-MACHINE] TXN-%lu: Inserting order_line row (item %d)", txn_id, i);
     txn->insert_row(tbl_order_line_, ol_row);
+    Log_info("[STATE-MACHINE] TXN-%lu: order_line inserted (item %d)", txn_id, i);
   }
 
+  Log_info("[STATE-MACHINE] TXN-%lu: All order_lines inserted, applying discount/tax", txn_id);
   // Apply discount and tax
   total_amount *= (1 - c_discount) * (1 + w_tax + d_tax);
 
+  Log_info("[STATE-MACHINE] TXN-%lu: Creating order row", txn_id);
   // 5. Insert order
   std::vector<mdb::Value> o_data = {
-      mdb::Value(d_next_o_id),
-      mdb::Value(d_id),
-      mdb::Value(w_id),
-      mdb::Value(c_id),
-      mdb::Value((int32_t)std::time(nullptr)),
-      mdb::Value((int32_t)0), // o_carrier_id (null)
-      mdb::Value(ol_cnt),
-      mdb::Value(all_local ? 1 : 0)};
+      mdb::Value(d_next_o_id),                              // o_id
+      mdb::Value(d_id),                                     // o_d_id
+      mdb::Value(w_id),                                     // o_w_id
+      mdb::Value(c_id),                                     // o_c_id
+      mdb::Value(std::to_string(std::time(nullptr))),      // o_entry_d (string)
+      mdb::Value((int32_t)0),                               // o_carrier_id (null)
+      mdb::Value(ol_cnt),                                   // o_ol_cnt
+      mdb::Value(all_local ? 1 : 0)                         // o_all_local
+  };
   auto *o_row = mdb::Row::create(tbl_order_->schema(), o_data);
+  if (!o_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: Failed to create order row", txn_id);
+    delete txn;
+    return false;
+  }
+  Log_info("[STATE-MACHINE] TXN-%lu: Inserting order row", txn_id);
   txn->insert_row(tbl_order_, o_row);
+  Log_info("[STATE-MACHINE] TXN-%lu: Order row inserted", txn_id);
 
+  Log_info("[STATE-MACHINE] TXN-%lu: Creating order index row", txn_id);
   // Insert into secondary index for OrderStatus lookup
   std::vector<mdb::Value> idx_data = {mdb::Value(c_id), mdb::Value(d_id),
                                       mdb::Value(w_id),
                                       mdb::Value(d_next_o_id)};
   auto *idx_row =
       mdb::Row::create(tbl_order_cid_secondary_->schema(), idx_data);
+  if (!idx_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: Failed to create order index row", txn_id);
+    delete txn;
+    return false;
+  }
+  Log_info("[STATE-MACHINE] TXN-%lu: Inserting order index row", txn_id);
   txn->insert_row(tbl_order_cid_secondary_, idx_row);
+  Log_info("[STATE-MACHINE] TXN-%lu: Order index row inserted", txn_id);
 
+  Log_info("[STATE-MACHINE] TXN-%lu: Creating new_order row", txn_id);
   // 6. Insert new_order
   std::vector<mdb::Value> no_data = {mdb::Value(d_next_o_id), mdb::Value(d_id),
                                      mdb::Value(w_id)};
   auto *no_row = mdb::Row::create(tbl_new_order_->schema(), no_data);
+  if (!no_row) {
+    Log_error("[STATE-MACHINE] TXN-%lu: Failed to create new_order row", txn_id);
+    delete txn;
+    return false;
+  }
+  Log_info("[STATE-MACHINE] TXN-%lu: Inserting new_order row", txn_id);
   txn->insert_row(tbl_new_order_, no_row);
+  Log_info("[STATE-MACHINE] TXN-%lu: new_order row inserted - TRANSACTION COMPLETE", txn_id);
 
   if (output) {
     (*output)["total"] = std::to_string(total_amount);
   }
 
-  delete txn;
+  Log_info("[STATE-MACHINE] TXN-%lu: NOT deleting txn (memory leak but prevents crash)", txn_id);
+  // MEMORY LEAK: NOT deleting txn to avoid coroutine crash
+  // TODO: Fix properly by understanding why delete causes exception
+  // delete txn;
   return true;
 }
 

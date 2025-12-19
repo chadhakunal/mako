@@ -65,6 +65,11 @@ public:
   LuigiDispatchBuilder &SetInvolvedShards(const std::vector<uint32_t> &shards);
 
   /**
+   * Set the transaction type (TPC-C: NEW_ORDER, PAYMENT, etc.).
+   */
+  LuigiDispatchBuilder &SetTxnType(uint32_t txn_type);
+
+  /**
    * Add a read operation.
    */
   LuigiDispatchBuilder &AddRead(uint16_t table_id, const std::string &key);
@@ -74,6 +79,16 @@ public:
    */
   LuigiDispatchBuilder &AddWrite(uint16_t table_id, const std::string &key,
                                  const std::string &value);
+
+  /**
+   * Add a working_set entry (TPC-C parameters).
+   */
+  LuigiDispatchBuilder &AddWorkingSetEntry(int32_t var_id, const std::string &value);
+
+  /**
+   * Set entire working_set from a map.
+   */
+  LuigiDispatchBuilder &SetWorkingSet(const std::map<int32_t, std::string> &working_set);
 
   /**
    * Get the underlying request structure.
@@ -88,6 +103,7 @@ public:
 private:
   luigi::DispatchRequest *request_;
   size_t msg_len_ = 0; // Current offset in ops_data
+  size_t ws_len_ = 0;  // Current offset in working_set_data
 };
 
 /**
@@ -213,10 +229,15 @@ protected:
   void HandleDeadlineConfirmReply(char *respBuf);
   void HandleWatermarkExchangeReply(char *respBuf);
 
+public:
+  // Set local receiver for handling local shard requests directly
+  void SetLocalReceiver(TransportReceiver* receiver) { local_receiver_ = receiver; }
+
 private:
   transport::Configuration config_;
   Transport *rpc_transport_;
   uint64_t client_id_;
+  TransportReceiver* local_receiver_ = nullptr;  // For local shard handling
 
   // Request tracking
   uint32_t last_req_id_ = 0;

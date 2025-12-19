@@ -101,11 +101,20 @@ void LuigiOWD::start() {
     return; // Already running
   }
 
+  // DISABLED: OWD background ping thread disabled for now
+  // Just return fixed 100ms delay from getMaxOWD() instead
+  std::cout << "[LuigiOWD] Background ping thread DISABLED - using fixed 100ms delay" << std::endl;
+  running_.store(true);  // Set to true so stop() works properly
+  return;
+
+  // Original ping thread (disabled):
+  /*
   running_.store(true);
   ping_thread_ = std::thread(&LuigiOWD::pingLoop, this);
 
   std::cout << "[LuigiOWD] Started background ping thread (interval="
             << PING_INTERVAL_MS << "ms)" << std::endl;
+  */
 }
 
 void LuigiOWD::stop() {
@@ -193,19 +202,24 @@ uint64_t LuigiOWD::getOWD(int shard_idx) const {
 }
 
 uint64_t LuigiOWD::getMaxOWD(const std::vector<int> &shard_indices) const {
-  uint64_t max_owd = 0;
-  std::lock_guard<std::mutex> lock(owd_mutex_);
+  // DISABLED OWD PINGING: Return fixed 100ms delay for all shards
+  // This avoids RPC connection issues during development/testing
+  return 100;  // Fixed 100ms delay
 
-  for (int shard_idx : shard_indices) {
-    auto it = owd_table_.find(shard_idx);
-    if (it != owd_table_.end()) {
-      max_owd = std::max(max_owd, it->second);
-    } else {
-      max_owd = std::max(max_owd, DEFAULT_INITIAL_OWD_MS);
-    }
-  }
-
-  return max_owd;
+  // Original implementation (disabled):
+  // uint64_t max_owd = 0;
+  // std::lock_guard<std::mutex> lock(owd_mutex_);
+  //
+  // for (int shard_idx : shard_indices) {
+  //   auto it = owd_table_.find(shard_idx);
+  //   if (it != owd_table_.end()) {
+  //     max_owd = std::max(max_owd, it->second);
+  //   } else {
+  //     max_owd = std::max(max_owd, DEFAULT_INITIAL_OWD_MS);
+  //   }
+  // }
+  //
+  // return max_owd;
 }
 
 uint64_t

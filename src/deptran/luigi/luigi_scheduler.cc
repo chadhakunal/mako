@@ -16,9 +16,15 @@ namespace janus {
 // Construction / Destruction
 //=============================================================================
 
-SchedulerLuigi::SchedulerLuigi() : SchedulerClassic() {
+SchedulerLuigi::SchedulerLuigi() {
+  Log_info("[SCHEDULER-CTOR] SchedulerLuigi constructor called");
+  
+  // Luigi has its own execution model - no TxLogServer needed
+  
   // Set executor's scheduler reference so it can call back for RPC coordination
   executor_.SetScheduler(this);
+  
+  Log_info("[SCHEDULER-CTOR] SchedulerLuigi constructor completed");
 }
 
 SchedulerLuigi::~SchedulerLuigi() { Stop(); }
@@ -28,13 +34,24 @@ SchedulerLuigi::~SchedulerLuigi() { Stop(); }
 //=============================================================================
 
 void SchedulerLuigi::Start() {
+  Log_info("[SCHEDULER-START] Starting scheduler threads...");
+  
   bool expected = false;
-  if (!running_.compare_exchange_strong(expected, true))
+  if (!running_.compare_exchange_strong(expected, true)) {
+    Log_warn("[SCHEDULER-START] Scheduler already running");
     return;
+  }
 
+  Log_info("[SCHEDULER-START] Creating hold/release thread...");
   hold_thread_ = new std::thread(&SchedulerLuigi::HoldReleaseTd, this);
+  
+  Log_info("[SCHEDULER-START] Creating execution thread...");
   exec_thread_ = new std::thread(&SchedulerLuigi::ExecTd, this);
+  
+  Log_info("[SCHEDULER-START] Creating watermark thread...");
   watermark_thread_ = new std::thread(&SchedulerLuigi::WatermarkTd, this);
+  
+  Log_info("[SCHEDULER-START] All threads started successfully");
 }
 
 void SchedulerLuigi::Stop() {
@@ -83,7 +100,9 @@ bool SchedulerLuigi::HasPendingTxn(uint64_t txn_id) const {
 //=============================================================================
 
 void SchedulerLuigi::LuigiDispatchFromRequest(
-    uint64_t txn_id, uint64_t expected_time, const std::vector<LuigiOp> &ops,
+    uint64_t txn_id, uint64_t expected_time, uint32_t txn_type,
+    const std::vector<LuigiOp> &ops,
+    const std::map<int32_t, std::string> &working_set,
     const std::vector<uint32_t> &involved_shards,
     std::function<void(int status, uint64_t commit_ts,
                        const std::vector<std::string> &read_results)>
@@ -98,7 +117,9 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
   auto entry = std::make_shared<LuigiLogEntry>(txn_id);
   entry->proposed_ts_ =
       expected_time; // Use expected_time directly as proposed timestamp
+  entry->txn_type_ = txn_type; // Set transaction type for state machine execution
   entry->ops_ = ops;
+  entry->working_set_ = working_set; // TPC-C parameters
 
   // Wrap callback to remove from pending when complete
   entry->reply_cb_ = [this, txn_id,
@@ -136,6 +157,9 @@ void SchedulerLuigi::LuigiDispatchFromRequest(
 
   // Enqueue to incoming queue (lock-free, thread-safe)
   incoming_txn_queue_.enqueue(entry);
+  
+  Log_info("[SCHEDULER-QUEUE] TXN-%lu: Enqueued (expected_time=%lu, ops=%zu, remote_shards=%zu)", 
+           txn_id, expected_time, ops.size(), entry->remote_shards_.size());
 }
 
 //=============================================================================
@@ -217,19 +241,52 @@ void SchedulerLuigi::RequeueForReposition(
 //=============================================================================
 
 void SchedulerLuigi::HoldReleaseTd() {
+  Log_info("[HOLD-RELEASE-THREAD] ===== THREAD STARTED =====");
+  
   std::shared_ptr<LuigiLogEntry> entries[256]; // bulk dequeue buffer
 
-  while (running_) {
+  try {
+    Log_info("[HOLD-RELEASE-THREAD] Entering try block, starting main loop");
+    int iterations = 0;
+    while (running_) {
+    iterations++;
+    if (iterations <= 5 || iterations % 1000 == 0) {
+      Log_info("[HOLD-RELEASE-THREAD] Loop iteration %d", iterations);
+    }
+    
     uint64_t now = GetMicrosecondTimestamp();
 
     //-------------------------------------------------------------------------
     // Phase 1: Pull from incoming_txn_queue_, do conflict check, add to
     // priority_queue_
     //-------------------------------------------------------------------------
-    size_t cnt = incoming_txn_queue_.try_dequeue_bulk(entries, 256);
+    size_t queue_size_approx = incoming_txn_queue_.size_approx();
+    if (iterations <= 10) {
+      Log_info("[HOLD-RELEASE-THREAD] Iteration %d: queue size_approx=%zu", iterations, queue_size_approx);
+    }
+    
+    // FIX: try_dequeue_bulk doesn't work with shared_ptr array - use loop instead
+    size_t cnt = 0;
+    try {
+      while (cnt < 256 && incoming_txn_queue_.try_dequeue(entries[cnt])) {
+        cnt++;
+      }
+    } catch (...) {
+      Log_error("[HOLD-RELEASE-THREAD] Exception during dequeue at iteration %d", iterations);
+      throw;
+    }
+    
+    if (iterations <= 10) {
+      Log_info("[HOLD-RELEASE-THREAD] Iteration %d: dequeued cnt=%zu items (queue had ~%zu)", 
+               iterations, cnt, queue_size_approx);
+    }
+    if (cnt > 0) {
+      Log_info("[HOLD-RELEASE-THREAD] *** Dequeued %zu txns from incoming_txn_queue ***", cnt);
+    }
     for (size_t i = 0; i < cnt; i++) {
-      auto entry = entries[i];
-      uint64_t txn_key = entry->tid_;
+      try {
+        auto entry = entries[i];
+        uint64_t txn_key = entry->tid_;
 
       //-----------------------------------------------------------------------
       // Check if this is a repositioning after agreement (Case 3)
@@ -275,41 +332,62 @@ void SchedulerLuigi::HoldReleaseTd() {
 
       // Insert into priority_queue_ (sorted by timestamp, then txn_id)
       priority_queue_[{entry->proposed_ts_, txn_key}] = entry;
+      } catch (...) {
+        Log_error("[HOLD-RELEASE-THREAD] Exception processing entry in Phase 1");
+        throw;
+      }
     }
 
     //-------------------------------------------------------------------------
     // Phase 2: Release txns whose deadline has passed -> ready_txn_queue_
     //-------------------------------------------------------------------------
-    while (!priority_queue_.empty()) {
-      auto it = priority_queue_.begin();
-      uint64_t deadline = it->first.first;
+    try {
+      while (!priority_queue_.empty()) {
+        auto it = priority_queue_.begin();
+        uint64_t deadline = it->first.first;
 
-      if (now < deadline) {
-        // Earliest deadline not yet reached, stop releasing
-        break;
-      }
+        if (now < deadline) {
+          // Earliest deadline not yet reached, stop releasing
+          break;
+        }
 
-      // Deadline reached! Release this entry
-      auto entry = it->second;
-      priority_queue_.erase(it);
+        // Deadline reached! Release this entry
+        auto entry = it->second;
+        priority_queue_.erase(it);
 
-      // Update lastReleasedDeadlines for all keys this txn touches
-      for (auto &k : entry->local_keys_) {
-        if (last_released_deadlines_[k] < entry->proposed_ts_) {
-          last_released_deadlines_[k] = entry->proposed_ts_;
+        // Update lastReleasedDeadlines for all keys this txn touches
+        for (auto &k : entry->local_keys_) {
+          if (last_released_deadlines_[k] < entry->proposed_ts_) {
+            last_released_deadlines_[k] = entry->proposed_ts_;
+          }
+        }
+
+        // Hand off to execution thread
+        ready_txn_queue_.enqueue(entry);
+        
+        if (entry->tid_ % 50 == 0) {
+          Log_info("[HOLD-RELEASE-THREAD] TXN-%lu: Released to ready_txn_queue_ (ts=%lu)",
+                   entry->tid_, entry->proposed_ts_);
         }
       }
-
-      // Hand off to execution thread
-      ready_txn_queue_.enqueue(entry);
+    } catch (...) {
+      Log_error("[HOLD-RELEASE-THREAD] Exception in Phase 2 (priority queue processing) at iteration %d", iterations);
+      throw;
     }
 
-    //-------------------------------------------------------------------------
-    // Small sleep to avoid busy-waiting when queues are empty
-    //-------------------------------------------------------------------------
-    if (cnt == 0 && priority_queue_.empty()) {
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
+      //-------------------------------------------------------------------------
+      // Small sleep to avoid busy-waiting when queues are empty
+      //-------------------------------------------------------------------------
+      if (cnt == 0 && priority_queue_.empty()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(100));
+      }
     }
+  } catch (int e) {
+    Log_info("[HOLD-RELEASE-THREAD] Coroutine unwinding (int=%d)", e);
+  } catch (const std::exception& e) {
+    Log_error("[HOLD-RELEASE-THREAD] Exception: %s", e.what());
+  } catch (...) {
+    Log_error("[HOLD-RELEASE-THREAD] Unknown exception");
   }
 }
 
@@ -327,13 +405,30 @@ void SchedulerLuigi::HoldReleaseTd() {
 //=============================================================================
 
 void SchedulerLuigi::ExecTd() {
+  Log_info("[EXEC-THREAD] Started");
   std::shared_ptr<LuigiLogEntry> entries[64];
+  int txns_executed = 0;
+  int last_log = 0;
 
-  while (running_) {
+  try {
+    while (running_) {
     size_t cnt = ready_txn_queue_.try_dequeue_bulk(entries, 64);
+    
+    if (cnt > 0) {
+      txns_executed += cnt;
+      if (txns_executed - last_log >= 50) {
+        Log_info("[EXEC-THREAD] Dequeued %zu txns from ready queue (total executed: %d)",
+                 cnt, txns_executed);
+        last_log = txns_executed;
+      }
+    }
 
     for (size_t i = 0; i < cnt; i++) {
       auto &entry = entries[i];
+
+      if (entry->tid_ % 50 == 0) {
+        Log_info("[EXEC-THREAD] TXN-%lu: Executing (ts=%lu)", entry->tid_, entry->proposed_ts_);
+      }
 
       // Delegate to executor for clean separation of concerns
       executor_.Execute(entry);
@@ -394,6 +489,13 @@ void SchedulerLuigi::ExecTd() {
     if (cnt == 0) {
       std::this_thread::sleep_for(std::chrono::microseconds(100));
     }
+  }
+  } catch (int e) {
+    Log_info("[EXEC-THREAD] Coroutine unwinding (int=%d)", e);
+  } catch (const std::exception& e) {
+    Log_error("[EXEC-THREAD] Exception: %s", e.what());
+  } catch (...) {
+    Log_error("[EXEC-THREAD] Unknown exception");
   }
 }
 
@@ -742,13 +844,19 @@ void SchedulerLuigi::Replicate(uint32_t worker_id,
   // Paxos stream corresponding to worker_id.
   // For now, we simulate success and update the watermark immediately.
 
-  // Log_debug("Luigi Replicate: worker %d replicating txn %lu at ts %lu",
-  //           worker_id, entry->tid_, entry->agreed_ts_);
+  if (entry->tid_ % 50 == 0) {
+    Log_info("[SCHEDULER-REPLICATE] TXN-%lu: Replicating on worker %d at ts=%lu",
+             entry->tid_, worker_id, entry->agreed_ts_);
+  }
 
   // TODO: Integrate real Paxos here if available
 
   // Update watermark immediately (simulating instant replication for now)
   UpdateLocalWatermark(worker_id, entry->agreed_ts_);
+  
+  if (entry->tid_ % 50 == 0) {
+    Log_info("[SCHEDULER-REPLICATE] TXN-%lu: Watermark updated", entry->tid_);
+  }
 }
 
 void SchedulerLuigi::WatermarkTd() {

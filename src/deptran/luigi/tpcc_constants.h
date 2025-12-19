@@ -6,13 +6,14 @@ namespace janus {
 
 //=============================================================================
 // TPC-C Transaction Types
+// NOTE: Must match txn_generator.h LUIGI_TXN_TPCC_* values
 //=============================================================================
-constexpr uint32_t LUIGI_TXN_MICRO = 0;
-constexpr uint32_t LUIGI_TXN_NEW_ORDER = 1;
-constexpr uint32_t LUIGI_TXN_PAYMENT = 2;
-constexpr uint32_t LUIGI_TXN_ORDER_STATUS = 3;
-constexpr uint32_t LUIGI_TXN_DELIVERY = 4;
-constexpr uint32_t LUIGI_TXN_STOCK_LEVEL = 5;
+constexpr uint32_t LUIGI_TXN_MICRO = 1;       // Match LUIGI_TXN_MICRO in txn_generator.h
+constexpr uint32_t LUIGI_TXN_NEW_ORDER = 10;  // Match LUIGI_TXN_TPCC_NEW_ORDER
+constexpr uint32_t LUIGI_TXN_PAYMENT = 20;    // Match LUIGI_TXN_TPCC_PAYMENT
+constexpr uint32_t LUIGI_TXN_ORDER_STATUS = 30; // Match LUIGI_TXN_TPCC_ORDER_STATUS
+constexpr uint32_t LUIGI_TXN_DELIVERY = 40;   // Match LUIGI_TXN_TPCC_DELIVERY
+constexpr uint32_t LUIGI_TXN_STOCK_LEVEL = 50; // Match LUIGI_TXN_TPCC_STOCK_LEVEL
 
 //=============================================================================
 // TPC-C Table IDs
