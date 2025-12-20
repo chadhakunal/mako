@@ -119,16 +119,11 @@ void LuigiReceiver::InitScheduler(uint32_t shard_id) {
       [this](const std::shared_ptr<LuigiLogEntry> &entry) -> bool {
         return ReplicateEntry(entry);
       });
-
-  // TEMPORARILY DISABLED: Server-side LuigiClient for leader agreement
-  // Testing if FastTransport creation causes the crash
-  Log_info("[RECEIVER-INIT] Skipping server-side client creation for debugging");
-  scheduler_->SetLuigiClient(nullptr);
-  
-  /* ORIGINAL CODE - COMMENTED FOR DEBUGGING
+  // Create server-side LuigiClient for leader agreement coordination
+  // This client is used to send deadline proposals to other shards
   Log_info("[RECEIVER-INIT] Creating dedicated client transport for leader agreement...");
   std::string local_uri = config_.shard(shard_id, mako::convertCluster("localhost")).host;
-  FastTransport* coordinator_transport = new FastTransport(
+  coordinator_transport_ = new FastTransport(
       config_.configFile,
       local_uri,
       "localhost",
@@ -141,11 +136,19 @@ void LuigiReceiver::InitScheduler(uint32_t shard_id) {
   Log_info("[RECEIVER-INIT] Creating server-side LuigiClient for leader agreement...");
   janus::LuigiClient* server_client = new janus::LuigiClient(
       config_.configFile,  // Config file path
-      coordinator_transport,  // Dedicated client transport
+      coordinator_transport_,  // Dedicated client transport
       shard_id + 1000);  // Unique client ID for server
   scheduler_->SetLuigiClient(server_client);
   Log_info("[RECEIVER-INIT] Server-side LuigiClient created with dedicated transport");
-  */
+
+  // Spawn event loop thread for coordinator transport (required for cross-shard RPCs)
+  Log_info("[RECEIVER-INIT] Starting coordinator transport event loop thread...");
+  coordinator_event_loop_thread_ = new std::thread([this]() {
+    Log_info("[COORDINATOR-TRANSPORT] Event loop thread started");
+    coordinator_transport_->Run();
+    Log_info("[COORDINATOR-TRANSPORT] Event loop thread exited");
+  });
+  Log_info("[RECEIVER-INIT] Coordinator event loop thread spawned");
 
   // Start scheduler threads
   Log_info("[RECEIVER-INIT] Starting scheduler threads...");
@@ -158,8 +161,31 @@ void LuigiReceiver::InitScheduler(uint32_t shard_id) {
 }
 
 void LuigiReceiver::StopScheduler() {
-  // Transport cleanup handled externally
+  // Stop coordinator transport event loop first
+  if (coordinator_transport_ != nullptr) {
+    Log_info("[RECEIVER-STOP] Stopping coordinator transport...");
+    coordinator_transport_->Stop();
+  }
 
+  // Join coordinator event loop thread
+  if (coordinator_event_loop_thread_ != nullptr) {
+    Log_info("[RECEIVER-STOP] Joining coordinator event loop thread...");
+    if (coordinator_event_loop_thread_->joinable()) {
+      coordinator_event_loop_thread_->join();
+    }
+    delete coordinator_event_loop_thread_;
+    coordinator_event_loop_thread_ = nullptr;
+    Log_info("[RECEIVER-STOP] Coordinator event loop thread joined");
+  }
+
+  // Clean up coordinator transport
+  if (coordinator_transport_ != nullptr) {
+    delete coordinator_transport_;
+    coordinator_transport_ = nullptr;
+    Log_info("[RECEIVER-STOP] Coordinator transport deleted");
+  }
+
+  // Stop and clean up scheduler
   if (scheduler_ != nullptr) {
     uint32_t shard_id = scheduler_->GetPartitionId();
     scheduler_->Stop();

@@ -143,6 +143,9 @@ private:
     // Generate order lines
     std::set<int32_t> used_items;
     bool all_local = true;
+    int32_t total_warehouses = config_.shard_num * config_.num_warehouses;
+
+
 
     for (int32_t i = 0; i < ol_cnt; i++) {
       // Select unique item
@@ -152,13 +155,15 @@ private:
       } while (used_items.find(i_id) != used_items.end());
       used_items.insert(i_id);
 
-      // Determine supply warehouse (1% remote)
+      // Determine supply warehouse
+      // Match Mako's g_micro_remote_item_pct = 5 (5% remote items across shards)
       int32_t supply_w_id;
-      if (config_.num_warehouses > 1 && RandomInt(0, 100) == 0) {
-        // Remote supply
-        supply_w_id = RandomInt(0, config_.num_warehouses - 2);
-        if (supply_w_id >= home_w_id)
-          supply_w_id++;
+      if (total_warehouses > 1 && config_.shard_num > 1 &&
+          RandomInt(1, 100) <= 5) {
+        // Remote supply from a DIFFERENT shard (like Mako)
+        do {
+          supply_w_id = RandomInt(0, total_warehouses - 1);
+        } while (WarehouseInShard(supply_w_id, shard_index_));
         all_local = false;
       } else {
         supply_w_id = home_w_id;
@@ -317,6 +322,11 @@ private:
   // Map warehouse to shard (global w_id / warehouses_per_shard = shard_index)
   uint32_t WarehouseToShard(int32_t w_id) const {
     return static_cast<uint32_t>(w_id) / config_.num_warehouses;
+  }
+
+  // Check if a warehouse belongs to a given shard (like Mako's WarehouseInShard)
+  bool WarehouseInShard(int32_t w_id, int32_t shard_id) const {
+    return WarehouseToShard(w_id) == static_cast<uint32_t>(shard_id);
   }
 
   // Generate TPC-C style last name

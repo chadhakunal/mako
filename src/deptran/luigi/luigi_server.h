@@ -16,6 +16,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <thread>
 
 #include "lib/transport.h"
 #include "lib/configuration.h"
@@ -34,6 +35,9 @@ template <typename T> class Arc;
 namespace mako {
 class HelperQueue;
 }
+
+// Forward declare FastTransport (defined in lib/fasttransport.h)
+class FastTransport;
 
 namespace janus {
 
@@ -120,6 +124,10 @@ private:
 
   // Luigi scheduler
   SchedulerLuigi *scheduler_ = nullptr;
+
+  // Coordinator transport for leader agreement RPCs
+  FastTransport *coordinator_transport_ = nullptr;
+  std::thread *coordinator_event_loop_thread_ = nullptr;
 
   // Async result storage
   std::unordered_map<uint64_t, TxnResult> completed_txns_;

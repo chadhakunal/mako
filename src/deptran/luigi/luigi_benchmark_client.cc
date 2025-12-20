@@ -76,6 +76,9 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
     generator_ = std::make_unique<TPCCTxnGenerator>(config_.gen_config);
     // Set shard index for shard-local warehouse assignment (like Mako)
     static_cast<TPCCTxnGenerator*>(generator_.get())->SetShardIndex(config_.shard_index);
+    Log_info("[TPCC-GEN] Created generator: shard_index=%d, shard_num=%d, warehouses_per_shard=%d, total_warehouses=%d",
+             config_.shard_index, config_.gen_config.shard_num, config_.gen_config.num_warehouses,
+             config_.gen_config.shard_num * config_.gen_config.num_warehouses);
     break;
   }
 
@@ -327,6 +330,11 @@ bool LuigiBenchmarkClient::DispatchRequest(const LuigiTxnRequest &req) {
 
     // Add working_set (TPC-C parameters)
     builder->SetWorkingSet(req.working_set);
+
+    // Set involved shards for leader agreement (CRITICAL for multi-shard txns!)
+    std::vector<uint32_t> involved_shards_vec(req.target_shards.begin(),
+                                               req.target_shards.end());
+    builder->SetInvolvedShards(involved_shards_vec);
 
     requests_per_shard[shard_id] = builder;
     
@@ -590,6 +598,11 @@ bool LuigiBenchmarkClient::DispatchOneTransactionAsync(int thread_id, int slot_i
       }
     }
     builder->SetWorkingSet(req.working_set);
+    
+    // Pass involved shards to server for cross-shard detection
+    std::vector<uint32_t> involved_shards_vec(req.target_shards.begin(), req.target_shards.end());
+    builder->SetInvolvedShards(involved_shards_vec);
+    
     requests_per_shard[shard_id] = builder;
   }
 

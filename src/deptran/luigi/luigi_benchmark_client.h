@@ -251,12 +251,12 @@ CreateDefaultTPCCConfig(int num_shards, int warehouses_per_shard = 1) {
   cfg.num_districts_per_wh = 10;
   cfg.num_customers_per_district = 3000;
   cfg.num_items = 1000;  // Reduced for testing (was 100000)
-  // Standard TPC-C mix
-  cfg.new_order_weight = 45;
-  cfg.payment_weight = 43;
-  cfg.order_status_weight = 4;
-  cfg.delivery_weight = 4;
-  cfg.stock_level_weight = 4;
+  // Standard TPC-C mix (as fractions 0-1, matching TxnGeneratorConfig defaults)
+  cfg.new_order_weight = 0.45;
+  cfg.payment_weight = 0.43;
+  cfg.order_status_weight = 0.04;
+  cfg.delivery_weight = 0.04;
+  cfg.stock_level_weight = 0.04;
   return cfg;
 }
 

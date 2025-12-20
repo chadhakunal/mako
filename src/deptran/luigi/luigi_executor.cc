@@ -57,16 +57,24 @@ void LuigiExecutor::Execute(std::shared_ptr<LuigiLogEntry> entry) {
     switch (agree_status) {
     case LUIGI_AGREE_INIT:
       //-------------------------------------------------------------------
-      // TEMPORARY: Skip agreement for debugging - mark as complete immediately
+      // Multi-shard: Initiate Tiga-style leader agreement
+      // This broadcasts our proposal to other shards asynchronously.
+      // Agreement completes when UpdateDeadlineRecord() receives all proposals.
       //-------------------------------------------------------------------
-      Log_info("Luigi Execute: txn %lu SKIPPING agreement for debugging",
-               entry->tid_);
-      entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
-      entry->agreed_ts_ = entry->proposed_ts_;
-      entry->ts_agreed_.store(true);
-      commit_ts = entry->proposed_ts_;
-      // Fall through to execution
-      break;
+      if (scheduler_ != nullptr) {
+        scheduler_->InitiateAgreement(entry);
+        Log_info("Luigi Execute: txn %lu initiated agreement", entry->tid_);
+      } else {
+        // Fallback if no scheduler (shouldn't happen in normal flow)
+        Log_warn("Luigi Execute: txn %lu no scheduler, fallback to direct",
+                 entry->tid_);
+        entry->agree_status_.store(LUIGI_AGREE_COMPLETE);
+        entry->agreed_ts_ = entry->proposed_ts_;
+        entry->ts_agreed_.store(true);
+      }
+      // Return - agreement will complete asynchronously
+      // UpdateDeadlineRecord() will re-enqueue when all proposals arrive
+      return;
 
     case LUIGI_AGREE_FLUSHING:
       //-------------------------------------------------------------------

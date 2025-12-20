@@ -603,13 +603,15 @@ void LuigiClient::InvokeDeadlinePropose(uint32_t target_shard, uint64_t tid,
                       error_continuation};
 
   luigi::DeadlineProposeRequest req;
-  // target_server_id must be a partition on the destination shard
-  // Use first partition of target shard (contiguous partitioning)
-  req.target_server_id = target_shard * config_.warehouses;  
+  // target_server_id must match the receiver's registered queue for THIS shard
+  // Queue routing: receiver shard registers queue for sender_partition = sender_shard * warehouses
+  // So we use OUR shard index * warehouses as the server_id that routes to receiver's queue for us
+  uint32_t my_shard = BenchmarkConfig::getInstance().getShardIndex();
+  req.target_server_id = my_shard * config_.warehouses;
   req.req_nr = req_id;
   req.tid = tid;
   req.proposed_ts = proposed_ts;
-  req.src_shard = BenchmarkConfig::getInstance().getShardIndex();
+  req.src_shard = my_shard;
   req.phase = phase;
 
   std::map<int, std::pair<char *, size_t>> data_to_send;
@@ -640,11 +642,13 @@ void LuigiClient::InvokeDeadlineConfirm(uint32_t target_shard, uint64_t tid,
                       error_continuation};
 
   luigi::DeadlineConfirmRequest req;
-  // target_server_id must be a partition on the destination shard
-  req.target_server_id = target_shard * config_.warehouses;
+  // target_server_id must match the receiver's registered queue for THIS shard
+  // Queue routing: use sender's partition for proper queue lookup on receiver
+  uint32_t my_shard = BenchmarkConfig::getInstance().getShardIndex();
+  req.target_server_id = my_shard * config_.warehouses;
   req.req_nr = req_id;
   req.tid = tid;
-  req.src_shard = BenchmarkConfig::getInstance().getShardIndex();
+  req.src_shard = my_shard;
   req.new_ts = new_ts;
 
   std::map<int, std::pair<char *, size_t>> data_to_send;
