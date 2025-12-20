@@ -87,6 +87,14 @@ public:
   // Get local shard index
   int getLocalShardIdx() const { return local_shard_idx_; }
 
+  // Set a fixed OWD value (in milliseconds) for all remote shards
+  // Use this to override dynamic OWD measurement with a known/simulated delay
+  // Set to 0 to disable fixed OWD and use measured/default values
+  void setFixedOWD(uint64_t owd_ms) { fixed_owd_ms_ = owd_ms; }
+
+  // Get the configured fixed OWD (0 if not set)
+  uint64_t getFixedOWD() const { return fixed_owd_ms_; }
+
 private:
   LuigiOWD();
   ~LuigiOWD();
@@ -105,6 +113,9 @@ private:
   int local_shard_idx_;
   std::string config_file_;
   std::string cluster_;
+
+  // Fixed OWD override (0 = use measured/default, >0 = use this value)
+  uint64_t fixed_owd_ms_ = 0;
 
   // Dedicated LuigiClient for OWD pings
   std::unique_ptr<janus::LuigiClient> luigi_client_;

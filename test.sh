@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Add network latency (100ms ± 10ms jitter = ~200ms RTT)
-# sudo tc qdisc add dev lo root netem delay 100ms 10ms
-# echo "Network delay added: 100ms ± 10ms"
+sudo tc qdisc add dev lo root netem delay 50ms 5ms
+echo "Network delay added: 50ms ± 5ms"
 
 # Clean up
 pkill -9 dbtest 2>/dev/null; rm -f nfs_sync_*; sleep 2
@@ -29,5 +29,5 @@ echo "8 processes started"
 wait
 
 # Remove network latency
-# sudo tc qdisc del dev lo root
+sudo tc qdisc del dev lo root
 echo "Network delay removed"

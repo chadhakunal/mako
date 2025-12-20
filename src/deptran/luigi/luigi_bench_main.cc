@@ -72,6 +72,8 @@ void PrintUsage(const char *prog) {
          "(default: 0.5)\n"
       << "  -o, --ops <n>              Operations per transaction for micro "
          "(default: 10)\n"
+      << "  --owd-ms <ms>              One-way delay for geo-distributed testing "
+         "(default: 1)\n"
       << "  -h, --help                 Show this help message\n"
       << "\nThe benchmark reads warehouses count from the YAML config file.\n";
 }
@@ -95,6 +97,7 @@ try {
   int ops_per_txn = 10;
   bool test_one_txn = false; // TEST MODE: send only one cross-shard transaction
   bool server_only = false;  // SERVER-ONLY MODE: no benchmark client, just wait
+  uint64_t owd_ms = 0;       // One-way delay for geo-distributed testing (0 = use default 1ms)
 
   // Parse command line arguments - support both Mako CI style and standalone
   static struct option long_options[] = {
@@ -114,6 +117,7 @@ try {
       {"warehouses", required_argument, 0, 'w'},
       {"read-ratio", required_argument, 0, 'r'},
       {"ops", required_argument, 0, 'o'},
+      {"owd-ms", required_argument, 0, 'O'},  // One-way delay for geo testing
       {"test-one", no_argument, 0, '1'},  // TEST: send one transaction
       {"server-only", no_argument, 0, 'S'},  // SERVER-ONLY: no benchmark client
       {"help", no_argument, 0, 'h'},
@@ -121,7 +125,7 @@ try {
 
   int opt;
   int option_index = 0;
-  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:P:1Sh",
+  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:O:P:1Sh",
                             long_options, &option_index)) != -1) {
     switch (opt) {
     case 'q': // --shard-config (Mako CI style)
@@ -157,6 +161,9 @@ try {
       break;
     case 'o': // --ops
       ops_per_txn = std::atoi(optarg);
+      break;
+    case 'O': // --owd-ms
+      owd_ms = std::atoi(optarg);
       break;
     case '1': // --test-one
       test_one_txn = true;
@@ -226,6 +233,11 @@ try {
   auto &luigiOwd = LuigiOWD::getInstance();
   luigiOwd.init(config.config_file, config.cluster, config.shard_index,
                 config.num_shards);
+  // Set fixed OWD if configured (for geo-distributed testing with tc)
+  if (owd_ms > 0) {
+    luigiOwd.setFixedOWD(owd_ms);
+    std::cout << "[TRACE]   - Fixed OWD: " << owd_ms << "ms (geo-distributed mode)" << std::endl;
+  }
   luigiOwd.start();
   std::cout << "[TRACE] Step 1: OWD service started" << std::endl;
 

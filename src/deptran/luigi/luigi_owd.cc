@@ -202,11 +202,23 @@ uint64_t LuigiOWD::getOWD(int shard_idx) const {
 }
 
 uint64_t LuigiOWD::getMaxOWD(const std::vector<int> &shard_indices) const {
-  // DISABLED OWD PINGING: Return fixed 100ms delay for all shards
-  // This avoids RPC connection issues during development/testing
-  return 1;  // Fixed 1ms delay (was 100ms)
+  // If a fixed OWD is configured (e.g., via --owd-ms for geo-distributed testing),
+  // return that value for all remote shards
+  if (fixed_owd_ms_ > 0) {
+    // Check if any of the requested shards is remote
+    for (int shard_idx : shard_indices) {
+      if (shard_idx != local_shard_idx_) {
+        return fixed_owd_ms_;
+      }
+    }
+    return 0;  // All local shards
+  }
 
-  // Original implementation (disabled):
+  // Default: return 1ms for localhost testing (OWD pinging disabled)
+  // For production, would use the commented-out code below with actual measurements
+  return 1;
+
+  // Original implementation (disabled - requires working OWD ping thread):
   // uint64_t max_owd = 0;
   // std::lock_guard<std::mutex> lock(owd_mutex_);
   //
