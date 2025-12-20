@@ -55,9 +55,15 @@ inline int32_t TPCC_VAR_OL_DIST_INFO(int i) { return 7000 + i; }
 inline int32_t TPCC_VAR_S_REMOTE_CNT(int i) { return 8000 + i; }
 
 class TPCCTxnGenerator : public LuigiTxnGenerator {
+private:
+  int shard_index_ = 0;  // Which shard this generator belongs to
+
 public:
   TPCCTxnGenerator(const TxnGeneratorConfig &config)
       : LuigiTxnGenerator(config) {}
+
+  // Set shard index for shard-local warehouse assignment (like Mako)
+  void SetShardIndex(int idx) { shard_index_ = idx; }
 
   std::string RTTI() override { return "TPCCTxnGenerator"; }
 
@@ -112,8 +118,10 @@ private:
   void GetNewOrderTxn(LuigiTxnRequest *req) {
     req->txn_type = LUIGI_TXN_TPCC_NEW_ORDER;
 
-    // Select warehouse based on client_id for locality
-    int32_t home_w_id = req->client_id % config_.num_warehouses;
+    // Select warehouse using SHARD-LOCAL IDs (like Mako)
+    // Each shard has its own range: shard 0 uses w_id 0-5, shard 1 uses 6-11, etc.
+    int32_t local_w_id = req->client_id % config_.num_warehouses;
+    int32_t home_w_id = shard_index_ * config_.num_warehouses + local_w_id;
     int32_t d_id = (req->client_id / config_.num_warehouses) %
                    config_.num_districts_per_wh;
     int32_t c_id = NURand(1022, 0, config_.num_customers_per_district - 1);
@@ -178,14 +186,17 @@ private:
   void GetPaymentTxn(LuigiTxnRequest *req) {
     req->txn_type = LUIGI_TXN_TPCC_PAYMENT;
 
-    int32_t home_w_id = req->client_id % config_.num_warehouses;
+    // Use shard-local warehouse ID (like Mako)
+    int32_t local_w_id = req->client_id % config_.num_warehouses;
+    int32_t home_w_id = shard_index_ * config_.num_warehouses + local_w_id;
     int32_t d_id = (req->client_id / config_.num_warehouses) %
                    config_.num_districts_per_wh;
 
-    // Customer warehouse and district (15% remote)
+    // Customer warehouse and district (15% remote) - use GLOBAL warehouse IDs
     int32_t c_w_id, c_d_id;
-    if (config_.num_warehouses > 1 && RandomInt(0, 100) < 15) {
-      c_w_id = RandomInt(0, config_.num_warehouses - 2);
+    int32_t total_warehouses = config_.shard_num * config_.num_warehouses;
+    if (total_warehouses > 1 && RandomInt(0, 100) < 15) {
+      c_w_id = RandomInt(0, total_warehouses - 2);
       if (c_w_id >= home_w_id)
         c_w_id++;
       c_d_id = RandomInt(0, config_.num_districts_per_wh - 1);
@@ -224,7 +235,9 @@ private:
   void GetOrderStatusTxn(LuigiTxnRequest *req) {
     req->txn_type = LUIGI_TXN_TPCC_ORDER_STATUS;
 
-    int32_t w_id = req->client_id % config_.num_warehouses;
+    // Use shard-local warehouse ID (like Mako)
+    int32_t local_w_id = req->client_id % config_.num_warehouses;
+    int32_t w_id = shard_index_ * config_.num_warehouses + local_w_id;
     int32_t d_id = (req->client_id / config_.num_warehouses) %
                    config_.num_districts_per_wh;
 
@@ -252,7 +265,9 @@ private:
   void GetDeliveryTxn(LuigiTxnRequest *req) {
     req->txn_type = LUIGI_TXN_TPCC_DELIVERY;
 
-    int32_t w_id = req->client_id % config_.num_warehouses;
+    // Use shard-local warehouse ID (like Mako)
+    int32_t local_w_id = req->client_id % config_.num_warehouses;
+    int32_t w_id = shard_index_ * config_.num_warehouses + local_w_id;
     int32_t carrier_id = RandomInt(1, 11);
 
     req->working_set[TPCC_VAR_W_ID] = std::to_string(w_id);
@@ -274,7 +289,9 @@ private:
   void GetStockLevelTxn(LuigiTxnRequest *req) {
     req->txn_type = LUIGI_TXN_TPCC_STOCK_LEVEL;
 
-    int32_t w_id = req->client_id % config_.num_warehouses;
+    // Use shard-local warehouse ID (like Mako)
+    int32_t local_w_id = req->client_id % config_.num_warehouses;
+    int32_t w_id = shard_index_ * config_.num_warehouses + local_w_id;
     int32_t d_id = (req->client_id / config_.num_warehouses) %
                    config_.num_districts_per_wh;
     int32_t threshold = RandomInt(10, 21);
@@ -297,9 +314,9 @@ private:
            x;
   }
 
-  // Map warehouse to shard
+  // Map warehouse to shard (global w_id / warehouses_per_shard = shard_index)
   uint32_t WarehouseToShard(int32_t w_id) const {
-    return static_cast<uint32_t>(w_id) % config_.shard_num;
+    return static_cast<uint32_t>(w_id) / config_.num_warehouses;
   }
 
   // Generate TPC-C style last name

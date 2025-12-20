@@ -74,6 +74,8 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
     break;
   case BenchmarkType::BM_TPCC:
     generator_ = std::make_unique<TPCCTxnGenerator>(config_.gen_config);
+    // Set shard index for shard-local warehouse assignment (like Mako)
+    static_cast<TPCCTxnGenerator*>(generator_.get())->SetShardIndex(config_.shard_index);
     break;
   }
 
@@ -104,7 +106,7 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
   in_flight_.clear();
   in_flight_.reserve(config_.num_threads * kMaxInFlightPerWorker);
   for (int i = 0; i < config_.num_threads * kMaxInFlightPerWorker; ++i) {
-    in_flight_.push_back(std::make_unique<InFlightTxn>());
+    in_flight_.push_back(std::make_shared<InFlightTxn>());
     in_flight_.back()->in_use = false;
     in_flight_.back()->completed.store(false);
   }
@@ -547,16 +549,13 @@ bool LuigiBenchmarkClient::DispatchOneTransactionAsync(int thread_id, int slot_i
   
   // Set up the in-flight slot
   int base = thread_id * kMaxInFlightPerWorker;
-  auto& slot = *in_flight_[base + slot_index];
-  slot.txn_id = req.txn_id;
-  slot.start_time_us = GetTimestampUs();
-  slot.txn_type = req.txn_type;
-  slot.completed.store(false, std::memory_order_release);
-  slot.committed.store(false, std::memory_order_release);
-  slot.in_use = true;
-
-  // Get pointer to slot for capture in callback
-  InFlightTxn* slot_ptr = &slot;
+  auto slot_ptr = in_flight_[base + slot_index];  // shared_ptr captures slot ownership
+  slot_ptr->txn_id = req.txn_id;
+  slot_ptr->start_time_us = GetTimestampUs();
+  slot_ptr->txn_type = req.txn_type;
+  slot_ptr->completed.store(false, std::memory_order_release);
+  slot_ptr->committed.store(false, std::memory_order_release);
+  slot_ptr->in_use = true;
 
   // Build dispatch request
   std::map<int, LuigiDispatchBuilder*> requests_per_shard;
@@ -595,22 +594,26 @@ bool LuigiBenchmarkClient::DispatchOneTransactionAsync(int thread_id, int slot_i
   }
 
   // Dispatch with async callbacks that set completion flag
+  // Capture slot_ptr (shared_ptr) to keep InFlightTxn alive until callback completes
+  // Capture requests_per_shard to ensure builders stay alive until RPC completes
+  // NOTE: Now that HandleDispatchReply only calls callback when ALL responses received,
+  // we can safely delete builders in callback without risk of double-free
   luigi_client_->InvokeDispatch(
       req.txn_id, requests_per_shard,
       [slot_ptr, requests_per_shard](char* respBuf) {
-        // Success callback
+        // Success callback - set flags and cleanup builders
         slot_ptr->committed.store(true, std::memory_order_release);
         slot_ptr->completed.store(true, std::memory_order_release);
-        // Cleanup builders
+        // Cleanup builders (safe - callback fires only once per transaction now)
         for (auto& pair : requests_per_shard) {
           delete pair.second;
         }
       },
       [slot_ptr, requests_per_shard]() {
-        // Error callback
+        // Error callback - set flags and cleanup builders
         slot_ptr->committed.store(false, std::memory_order_release);
         slot_ptr->completed.store(true, std::memory_order_release);
-        // Cleanup builders
+        // Cleanup builders (safe - callback fires only once per transaction now)
         for (auto& pair : requests_per_shard) {
           delete pair.second;
         }

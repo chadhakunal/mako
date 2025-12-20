@@ -274,7 +274,7 @@ void LuigiClient::InvokeDispatch(
              txn_nr, requests_per_shard.size());
   }
 
-  uint32_t req_id = ++last_req_id_;
+  uint32_t req_id = last_req_id_.fetch_add(1) + 1;
   req_id *= 10;
 
   // Use sender's partition ID (0 for benchmark client)
@@ -425,6 +425,7 @@ void LuigiClient::HandleDispatchReply(char *respBuf) {
   // Look up the pending request by req_nr
   PendingRequest pending;
   bool found = false;
+  bool is_final_response = false;
   {
     std::lock_guard<std::mutex> lock(pending_mutex_);
     auto it = pending_requests_.find(resp->req_nr);
@@ -434,6 +435,7 @@ void LuigiClient::HandleDispatchReply(char *respBuf) {
       if (pending.num_responses_pending <= 0) {
         // All responses received, remove from map
         pending_requests_.erase(it);
+        is_final_response = true;
       } else {
         // Update count
         it->second.num_responses_pending = pending.num_responses_pending;
@@ -447,14 +449,16 @@ void LuigiClient::HandleDispatchReply(char *respBuf) {
     return;
   }
 
-  // Invoke callback
-  if (pending.response_cb) {
+  // CRITICAL FIX: Only invoke callback when ALL responses are received!
+  // Previously, callback was invoked per-shard, causing race conditions
+  // where the slot would be marked complete and reused before all callbacks fired.
+  if (is_final_response && pending.response_cb) {
     pending.response_cb(respBuf);
   }
 
   if (resp->txn_id <= 10 || resp->txn_id % 50 == 0) {
-    Log_info("[LUIGI-CLIENT] TXN-%lu: Callback invoked, remaining=%d", 
-             resp->txn_id, pending.num_responses_pending);
+    Log_info("[LUIGI-CLIENT] TXN-%lu: Response processed, remaining=%d, is_final=%d", 
+             resp->txn_id, pending.num_responses_pending, is_final_response ? 1 : 0);
   }
 }
 

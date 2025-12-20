@@ -215,7 +215,7 @@ private:
   // Per-worker in-flight transaction tracking for pipelining
   // Layout: in_flight_[thread_id * kMaxInFlightPerWorker + slot_index]
   // Using unique_ptr because std::atomic is non-movable
-  std::vector<std::unique_ptr<InFlightTxn>> in_flight_;
+  std::vector<std::shared_ptr<InFlightTxn>> in_flight_;
   
   // Async dispatch helper methods
   // Find a free slot in the in-flight array for this worker

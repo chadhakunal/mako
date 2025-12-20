@@ -241,7 +241,7 @@ private:
   TransportReceiver* local_receiver_ = nullptr;  // For local shard handling
 
   // Request tracking
-  uint32_t last_req_id_ = 0;
+  std::atomic<uint32_t> last_req_id_{0};  // MUST be atomic - accessed from multiple threads
   bool blocked_ = false;
   int num_response_waiting_ = 0;
 
