@@ -11,6 +11,7 @@
  * Uses Mako's existing memdb storage layer (identical to Tiga's).
  */
 
+#include <atomic>
 #include <functional>
 #include <map>
 #include <memory>
@@ -226,6 +227,9 @@ private:
   uint32_t num_districts_per_wh_ = 10;
   uint32_t num_customers_per_district_ = 3000;
   uint32_t num_items_ = 100000;
+
+  // Auto-increment counter for history table row IDs
+  std::atomic<int64_t> next_history_row_id_{1};
 
 public:
   LuigiTPCCStateMachine(uint32_t shard_id, uint32_t replica_id,

@@ -194,14 +194,14 @@ void LuigiTPCCStateMachine::InitializeTables() {
     txn_mgr_.reg_table("order", tbl_order_);
   }
 
-  // Order C_ID Secondary Index: (O_C_ID, O_D_ID, O_W_ID) -> O_ID
+  // Order C_ID Secondary Index: (O_C_ID, O_D_ID, O_W_ID, O_ID) -> for range queries
   // Used by OrderStatus to find most recent order for a customer
   {
     auto *schema = new mdb::Schema();
     schema->add_column("o_c_id", mdb::Value::I32, true);
     schema->add_column("o_d_id", mdb::Value::I32, true);
     schema->add_column("o_w_id", mdb::Value::I32, true);
-    schema->add_column("o_id", mdb::Value::I32); // The actual o_id value
+    schema->add_column("o_id", mdb::Value::I32, true); // Also key for range queries
     schemas_.push_back(schema);
     tbl_order_cid_secondary_ =
         new mdb::SortedTable("order_cid_secondary", schema);
@@ -867,11 +867,18 @@ bool LuigiTPCCStateMachine::ExecutePayment(
   }
 
   // 4. Insert history record
+  int64_t h_row_id = next_history_row_id_.fetch_add(1);
+  std::string h_date = std::to_string(std::time(nullptr));
   std::vector<mdb::Value> h_data = {
-      mdb::Value(c_id),     mdb::Value(d_id),
-      mdb::Value(w_id),     mdb::Value(d_id),
-      mdb::Value(w_id),     mdb::Value((int32_t)std::time(nullptr)),
-      mdb::Value(h_amount), mdb::Value("payment_data")};
+      mdb::Value(h_row_id),   // h_row_id (primary key)
+      mdb::Value(c_id),       // h_c_id
+      mdb::Value(d_id),       // h_c_d_id
+      mdb::Value(w_id),       // h_c_w_id
+      mdb::Value(d_id),       // h_d_id
+      mdb::Value(w_id),       // h_w_id
+      mdb::Value(h_date),     // h_date (STR)
+      mdb::Value(h_amount),   // h_amount
+      mdb::Value(std::string("payment_data"))}; // h_data
   auto *h_row = mdb::Row::create(tbl_history_->schema(), h_data);
   txn->insert_row(tbl_history_, h_row);
 
