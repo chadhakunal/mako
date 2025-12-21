@@ -153,6 +153,34 @@ Luigi uses **One-Way Delay (OWD) based timestamps** that eliminate coordination 
 
 The higher the network latency, the more RTTs Luigi saves per transaction.
 
+### Cross-Shard Transaction Ratio Impact
+
+**Test Environment:**
+- **Configuration**: 2 shards, 4 threads/shard, TPC-C workload
+- **Network Delay**: 50ms ± 5ms
+- **Duration**: 10 seconds per test
+
+| Cross-Shard % | Mako TPS | Luigi TPS | **Speedup** | Mako Abort Rate | Luigi Abort Rate |
+|---------------|----------|-----------|-------------|-----------------|------------------|
+| 5%            | 227      | 345       | **1.51x**   | 3.2%            | **0%**           |
+| 15%           | 226      | 188       | 0.83x       | 1.6%            | **0%**           |
+| 25%           | 226      | 171       | 0.75x       | 2.7%            | **0%**           |
+| 35%           | 227      | 161       | 0.70x       | 2.2%            | **0%**           |
+
+#### Key Observations
+
+1. **Luigi wins at low cross-shard ratios**: At 5% cross-shard, Luigi achieves 1.51x speedup
+2. **Mako wins at high cross-shard ratios**: Above ~10% cross-shard, Mako outperforms Luigi
+3. **Mako throughput is stable**: Mako maintains ~227 TPS regardless of cross-shard ratio
+4. **Luigi throughput degrades**: Luigi TPS drops from 345 → 161 as cross-shard increases (5% → 35%)
+5. **Zero aborts for Luigi**: Luigi maintains 0% abort rate at all cross-shard ratios
+
+#### Why This Happens
+
+- **Luigi's overhead per distributed txn**: Each cross-shard transaction requires timestamp agreement across shards, adding per-txn coordination cost
+- **Mako's batch efficiency**: Mako batches cross-shard operations and handles conflicts via OCC, which scales better under high cross-shard contention
+- **Sweet spot**: Luigi excels in workloads with low cross-shard ratios (typical TPC-C: ~5-10%) and high network latency
+
 ### Running Your Own Benchmarks
 
 ```bash
@@ -161,6 +189,9 @@ sudo bash examples/compare_mako_luigi_simple.sh 4 15
 
 # Compare with simulated network delay (50ms ± 5ms jitter)
 sudo bash examples/compare_mako_luigi_geo.sh 4 15 50 5
+
+# Test different cross-shard ratios (5%, 15%, 25%, 35%)
+sudo bash examples/test_cross_shard_ratio.sh 4 10 50 5
 
 # Luigi-only test
 sudo bash examples/test_luigi_simple.sh 4 15
