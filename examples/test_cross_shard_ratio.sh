@@ -43,7 +43,7 @@ echo "cross_shard_pct,mako_tps,luigi_tps,speedup,mako_abort,luigi_abort" > "$res
 for pct in 5 15 25 35; do
     echo ""
     echo "═══════════════════════════════════════════════════════════════════════════════"
-    echo "  Testing ${pct}% cross-shard transactions"
+    echo "  Testing ${pct}% cross-shard transactions (BOTH Mako and Luigi)"
     echo "═══════════════════════════════════════════════════════════════════════════════"
     
     # Clean up between runs
@@ -52,8 +52,14 @@ for pct in 5 15 25 35; do
     sudo rm -rf /tmp/*_mako_rocksdb_shard* 2>/dev/null || true
     ipcrm -a 2>/dev/null || true
     
+    # Update Mako's cross-shard percentage and rebuild
+    echo "Rebuilding Mako with ${pct}% cross-shard..."
+    sed -i "s/static int g_new_order_remote_item_pct = [0-9]*;/static int g_new_order_remote_item_pct = ${pct};/" \
+        "$path/src/mako/benchmarks/tpcc.cc"
+    make -C "$path/build" -j4 dbtest >/dev/null 2>&1
+    
     # Run Mako (using dbtest binary)
-    echo "Running Mako..."
+    echo "Running Mako with ${pct}% cross-shard..."
     pkill -9 dbtest 2>/dev/null || true
     sleep 2
     
