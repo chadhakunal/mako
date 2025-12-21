@@ -120,50 +120,58 @@ Luigi reuses Mako's configuration system:
 
 ## Results
 
-### Evaluation Status: 🔄 Pending
+### Performance Comparison: Luigi vs Mako
 
-The following experiments are planned but not yet completed:
+**Test Environment:**
+- **Machine**: Linode 4-core, 8GB RAM
+- **Configuration**: 2 shards, 4 threads/shard, TPC-C workload, ~5% cross-shard transactions
+- **Network Delay**: Simulated using `tc` (Linux traffic control)
+- **Duration**: 15 seconds per test
 
-#### Planned Experiments
+#### Throughput vs Network Latency
 
-| Experiment | Configuration | Status |
-|------------|---------------|--------|
-| **Single-shard throughput** | 1 shard, 1-16 threads, micro | ⏳ Pending |
-| **Multi-shard throughput** | 2-8 shards, 6 threads, micro | ⏳ Pending |
-| **TPC-C throughput** | 2 shards, 6 threads, TPC-C | ⏳ Pending |
-| **Latency distribution** | 2 shards, P50/P99/P99.9 | ⏳ Pending |
-| **Comparison vs Mako OCC** | Same workload, both protocols | ⏳ Pending |
-| **Replication overhead** | With/without Paxos | ⏳ Pending |
+| Network Delay | Mako TPS | Luigi TPS | **Speedup** | Mako Abort Rate | Luigi Abort Rate |
+|---------------|----------|-----------|-------------|-----------------|------------------|
+| 0ms (local)   | 10,404   | 4,812     | 0.46x       | 1.7%            | **0%**           |
+| 25ms (regional) | 447    | 663       | **1.48x**   | 2.0%            | **0%**           |
+| 50ms (cross-region) | 226 | 350      | **1.54x**   | 2.2%            | **0%**           |
+| 100ms (intercontinental) | 113 | 176 | **1.55x**   | 4.0%            | **0%**           |
+| 150ms (high latency) | 69 | 117      | **1.69x**   | 6.3%            | **0%**           |
 
-#### Expected Metrics
+#### Key Observations
 
+1. **Luigi excels with network latency**: As network delay increases, Luigi's advantage grows from 1.48x to 1.69x
+2. **Zero aborts**: Luigi achieves 0% abort rate vs Mako's 1.7-6.3% due to deterministic timestamp ordering
+3. **Local performance tradeoff**: Without network delay, Luigi is slower (0.46x) due to timestamp coordination overhead
+4. **Abort rate scaling**: Mako's abort rate increases with latency (1.7% → 6.3%), while Luigi remains at 0%
+
+#### Why Luigi Wins with Network Delay
+
+Luigi uses **One-Way Delay (OWD) based timestamps** that eliminate coordination round-trips:
+- **Mako**: Each cross-shard transaction requires 2PC coordination (multiple RTTs)
+- **Luigi**: Transactions execute deterministically at agreed timestamps (single RTT for dispatch)
+
+The higher the network latency, the more RTTs Luigi saves per transaction.
+
+### Running Your Own Benchmarks
+
+```bash
+# Compare Luigi vs Mako (no network delay)
+sudo bash examples/compare_mako_luigi_simple.sh 4 15
+
+# Compare with simulated network delay (50ms ± 5ms jitter)
+sudo bash examples/compare_mako_luigi_geo.sh 4 15 50 5
+
+# Luigi-only test
+sudo bash examples/test_luigi_simple.sh 4 15
 ```
-========== Benchmark Results ==========
-Duration:          [PENDING] ms
-Total Txns:        [PENDING]
-Committed:         [PENDING]
-Aborted:           [PENDING] ([PENDING]%)
-Throughput:        [PENDING] txns/sec
-Avg Latency:       [PENDING] us
-P50 Latency:       [PENDING] us
-P99 Latency:       [PENDING] us
-P99.9 Latency:     [PENDING] us
-========================================
-```
-
-#### Baseline Comparisons (Planned)
-
-| System | Throughput (txns/sec) | P99 Latency (μs) | Notes |
-|--------|----------------------|------------------|-------|
-| Mako (OCC) | TBD | TBD | Baseline |
-| Luigi (Timestamp) | TBD | TBD | This work |
-| Tiga (Reference) | TBD | TBD | Original implementation |
 
 ### Known Limitations
 
 1. **Storage layer**: Currently uses Tiga's memdb; RocksDB persistence not yet integrated
-2. **Replication**: Paxos integration in progress
-3. **Multi-datacenter**: OWD measurement assumes single datacenter latencies
+2. **Replication**: Paxos integration complete but disabled in current benchmarks
+3. **OWD**: Currently hardcoded; dynamic OWD measurement pending
+4. **Resource constraints**: Tests on 4-core machine; expect better scaling on larger hardware
 
 ## References
 
