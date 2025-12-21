@@ -57,6 +57,7 @@ inline int32_t TPCC_VAR_S_REMOTE_CNT(int i) { return 8000 + i; }
 class TPCCTxnGenerator : public LuigiTxnGenerator {
 private:
   int shard_index_ = 0;  // Which shard this generator belongs to
+  int remote_item_pct_ = 5; // Percentage of cross-shard items (default 5%)
 
 public:
   TPCCTxnGenerator(const TxnGeneratorConfig &config)
@@ -64,6 +65,10 @@ public:
 
   // Set shard index for shard-local warehouse assignment (like Mako)
   void SetShardIndex(int idx) { shard_index_ = idx; }
+
+  // Set cross-shard item percentage (default 5%)
+  void SetRemoteItemPct(int pct) { remote_item_pct_ = pct; }
+  int GetRemoteItemPct() const { return remote_item_pct_; }
 
   std::string RTTI() override { return "TPCCTxnGenerator"; }
 
@@ -156,10 +161,10 @@ private:
       used_items.insert(i_id);
 
       // Determine supply warehouse
-      // Match Mako's g_micro_remote_item_pct = 5 (5% remote items across shards)
+      // Cross-shard percentage is configurable (default 5%)
       int32_t supply_w_id;
       if (total_warehouses > 1 && config_.shard_num > 1 &&
-          RandomInt(1, 100) <= 5) {
+          RandomInt(1, 100) <= remote_item_pct_) {
         // Remote supply from a DIFFERENT shard (like Mako)
         do {
           supply_w_id = RandomInt(0, total_warehouses - 1);

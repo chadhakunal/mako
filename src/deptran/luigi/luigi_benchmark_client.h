@@ -123,6 +123,7 @@ public:
     int duration_sec = 10;     // Benchmark duration
     bool is_open_loop = false; // Open-loop vs closed-loop
     int target_rate = 0;       // Target ops/sec for open-loop
+    int cross_shard_pct = 5;   // Cross-shard percentage for TPC-C (default 5%)
 
     // Generator config
     janus::TxnGeneratorConfig gen_config;

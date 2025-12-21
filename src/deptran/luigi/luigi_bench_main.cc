@@ -95,6 +95,7 @@ try {
   int warehouses = 0; // 0 means read from config file
   double read_ratio = 0.5;
   int ops_per_txn = 10;
+  int cross_shard_pct = 5; // Cross-shard percentage for TPC-C (default 5%)
   bool test_one_txn = false; // TEST MODE: send only one cross-shard transaction
   bool server_only = false;  // SERVER-ONLY MODE: no benchmark client, just wait
   uint64_t owd_ms = 0;       // One-way delay for geo-distributed testing (0 = use default 1ms)
@@ -118,6 +119,7 @@ try {
       {"read-ratio", required_argument, 0, 'r'},
       {"ops", required_argument, 0, 'o'},
       {"owd-ms", required_argument, 0, 'O'},  // One-way delay for geo testing
+      {"cross-shard-pct", required_argument, 0, 'X'},  // Cross-shard percentage
       {"test-one", no_argument, 0, '1'},  // TEST: send one transaction
       {"server-only", no_argument, 0, 'S'},  // SERVER-ONLY: no benchmark client
       {"help", no_argument, 0, 'h'},
@@ -125,7 +127,7 @@ try {
 
   int opt;
   int option_index = 0;
-  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:O:P:1Sh",
+  while ((opt = getopt_long(argc, argv, "q:g:t:c:G:C:b:T:d:k:w:r:o:O:X:P:1Sh",
                             long_options, &option_index)) != -1) {
     switch (opt) {
     case 'q': // --shard-config (Mako CI style)
@@ -164,6 +166,9 @@ try {
       break;
     case 'O': // --owd-ms
       owd_ms = std::atoi(optarg);
+      break;
+    case 'X': // --cross-shard-pct
+      cross_shard_pct = std::atoi(optarg);
       break;
     case '1': // --test-one
       test_one_txn = true;
@@ -220,6 +225,7 @@ try {
     config.gen_config.ops_per_txn = ops_per_txn;
   } else if (benchmark_type == "tpcc") {
     config.gen_config = CreateDefaultTPCCConfig(config.num_shards, warehouses);
+    config.cross_shard_pct = cross_shard_pct;  // Pass cross-shard percentage to TPC-C
   } else {
     std::cerr << "Error: Unknown benchmark type '" << benchmark_type << "'\n";
     std::cerr << "Valid types: micro, micro_single, tpcc\n";

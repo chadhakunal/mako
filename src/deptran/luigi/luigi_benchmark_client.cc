@@ -76,9 +76,11 @@ LuigiBenchmarkClient::RunBenchmark(LuigiBenchmarkClient::BenchmarkType type) {
     generator_ = std::make_unique<TPCCTxnGenerator>(config_.gen_config);
     // Set shard index for shard-local warehouse assignment (like Mako)
     static_cast<TPCCTxnGenerator*>(generator_.get())->SetShardIndex(config_.shard_index);
-    Log_info("[TPCC-GEN] Created generator: shard_index=%d, shard_num=%d, warehouses_per_shard=%d, total_warehouses=%d",
+    // Set cross-shard percentage
+    static_cast<TPCCTxnGenerator*>(generator_.get())->SetRemoteItemPct(config_.cross_shard_pct);
+    Log_info("[TPCC-GEN] Created generator: shard_index=%d, shard_num=%d, warehouses_per_shard=%d, total_warehouses=%d, cross_shard_pct=%d%%",
              config_.shard_index, config_.gen_config.shard_num, config_.gen_config.num_warehouses,
-             config_.gen_config.shard_num * config_.gen_config.num_warehouses);
+             config_.gen_config.shard_num * config_.gen_config.num_warehouses, config_.cross_shard_pct);
     break;
   }
 
