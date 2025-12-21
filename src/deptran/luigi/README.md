@@ -74,3 +74,11 @@ sudo bash examples/test_cross_shard_ratio.sh 4 10 50 5
 - **Machine**: Linode 4-core, 8GB RAM
 - **Config**: 2 shards, 4 threads/shard, TPC-C
 - **Network**: Simulated via `tc` (Linux traffic control)
+
+## Future Work
+
+1. **Dynamic OWD measurement** - Currently hardcoded; implement real-time OWD probing between shards
+2. **RocksDB persistence** - Integrate durable storage (currently uses in-memory Tiga memdb)
+3. **Paxos replication** - Enable fault tolerance via Mako's Paxos layer (infrastructure ready, disabled in benchmarks)
+4. **Larger scale testing** - Run on 56-core machines and multi-node clusters for realistic geo-distributed evaluation
+5. **Adaptive timestamp headroom** - Dynamically adjust OWD buffer based on network variance
