@@ -1,14 +1,44 @@
 # Luigi: Timestamp-Ordered Distributed Transactions
 
-Luigi is a distributed transaction protocol using **timestamp ordering** instead of OCC. Built on Mako's infrastructure with Tiga's storage model.
+Luigi is a distributed transaction protocol that replaces Mako's OCC (Optimistic Concurrency Control) with **timestamp ordering**. The goal is to reduce coordination overhead in geo-distributed settings by using One-Way Delay (OWD) based timestamps to deterministically order transactions, eliminating multi-round-trip 2PC coordination.
 
-## Quick Start
+## Project Structure
+
+| File | Description |
+|------|-------------|
+| `luigi_bench_main.cc` | Main entry point, CLI parsing |
+| `luigi_benchmark_client.cc/h` | Benchmark driver, stats collection |
+| `luigi_client.cc/h` | Client-side transaction dispatch |
+| `luigi_server.cc/h` | Server-side request handling |
+| `luigi_scheduler.cc/h` | Transaction queue and timestamp ordering |
+| `luigi_executor.cc/h` | Transaction execution engine |
+| `luigi_state_machine.cc/h` | TPC-C stored procedures |
+| `luigi_transport_setup.cc/h` | Network layer (delegates to Mako's eRPC) |
+| `luigi_owd.cc/h` | One-Way Delay measurement |
+| `tpcc_txn_generator.h` | TPC-C workload generator |
+| `micro_txn_generator.h` | Micro benchmark generator |
+
+## Building
 
 ```bash
-make -j32                    # Build
-./build/luigi_bench \        # Run
+cd /path/to/mako
+make -j32 mako-raft
+# Binary: ./build/luigi_bench
+```
+
+## Running Benchmarks
+
+```bash
+# Single Luigi test
+./build/luigi_bench \
     --shard-config src/mako/config/local-shards2-warehouses4.yml \
     --shard-index 0 -P localhost --num-threads 4 --benchmark tpcc --duration 30
+
+# Luigi vs Mako with network delay (50ms ± 5ms)
+sudo bash examples/compare_mako_luigi_geo.sh 4 15 50 5
+
+# Cross-shard ratio test (rebuilds Mako for each %)
+sudo bash examples/test_cross_shard_ratio.sh 4 10 50 5
 ```
 
 ## Results
@@ -25,7 +55,7 @@ make -j32                    # Build
 
 **Luigi wins with network latency** - speedup grows from 1.48x to 1.69x as delay increases.
 
-### Cross-Shard Ratio Impact (50ms delay, fair comparison)
+### Cross-Shard Ratio Impact (50ms delay)
 
 | Cross-Shard % | Mako TPS | Luigi TPS | **Speedup** | Mako Abort | Luigi Abort |
 |---------------|----------|-----------|-------------|------------|-------------|
@@ -39,32 +69,8 @@ make -j32                    # Build
 - **Luigi degrades slower**: 348 → 158 TPS (55% drop)
 - **Mako aborts climb**: 1.8% → 7.5%, Luigi stays at **0%**
 
-### Why Luigi Wins
-
-1. **OWD-based timestamps** eliminate coordination round-trips
-2. **Single RTT dispatch** vs Mako's multi-RTT 2PC
-3. **Zero aborts** from deterministic timestamp ordering
-
 ### Test Environment
 
 - **Machine**: Linode 4-core, 8GB RAM
 - **Config**: 2 shards, 4 threads/shard, TPC-C
 - **Network**: Simulated via `tc` (Linux traffic control)
-
-## Running Benchmarks
-
-```bash
-# Luigi vs Mako with network delay
-sudo bash examples/compare_mako_luigi_geo.sh 4 15 50 5
-
-# Cross-shard ratio test (rebuilds Mako for each %)
-sudo bash examples/test_cross_shard_ratio.sh 4 10 50 5
-```
-
-## Protocol Summary
-
-1. **Timestamp Init**: `T.ts = now() + max_OWD + headroom`
-2. **Dispatch**: Send complete op set to all shards
-3. **Agreement**: `T.agreed_ts = max(T.ts)` across shards
-4. **Execute**: Leaders execute at agreed timestamp
-5. **Commit**: Confirm when watermarks advance past T.ts
