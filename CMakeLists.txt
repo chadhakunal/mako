@@ -608,6 +608,21 @@ add_custom_target(rcc_rpc_gen DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/rcc_rpc.py
 )
 
+# Luigi RPC generation
+add_custom_command(
+  OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi.h
+         ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi.py
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/bin/rpcgen --cpp --python src/deptran/luigi/luigi.rpc
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi.rpc
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+add_custom_target(luigi_rpc_gen DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran/luigi/luigi.py
+)
+
+
 # Custom command for lz4 library - build only if missing
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third-party/lz4/liblz4.so")
   message(STATUS "Building LZ4 library...")
@@ -658,6 +673,13 @@ list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/raft_main_helper.cc")
 list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/bench/paxos_lib/.*")
 # Exclude MongoDB backend (requires mongocxx library)
 list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/mongodb/.*")
+# Exclude Luigi main files (they are standalone executables)
+list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/luigi/coordinator\\.cc$")
+list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/luigi/server\\.cc$")
+# Exclude hello world test files (they have main functions)
+list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/hello_client.cc")
+list(FILTER DEPTRAN_SRC EXCLUDE REGEX "src/deptran/hello_server.cc")
+
 
 # Choose helper source based on MAKO_USE_RAFT
 if(MAKO_USE_RAFT)
@@ -674,11 +696,12 @@ add_library(txlog SHARED
     ${MEMDB_SRC}
 )
 
-# Add dependency to ensure rcc_rpc.h is generated before txlog is built
-add_dependencies(txlog rcc_rpc_gen)
+# Add dependency to ensure rcc_rpc.h and luigi.h are generated before txlog is built
+add_dependencies(txlog rcc_rpc_gen luigi_rpc_gen)
 
 target_include_directories(txlog PRIVATE
     src
+    src/mako
     src/rrr
     src/memdb
     src/deptran
@@ -703,6 +726,7 @@ target_link_libraries(txlog
     ${CMAKE_DL_LIBS}
     Python3::Python
 )
+
 
 # Set output location to match expected path
 set_target_properties(txlog PROPERTIES
@@ -902,6 +926,84 @@ function(add_apps exec_name exec_path)
 endfunction()
 
 add_apps(dbtest src/mako/benchmarks/dbtest.cc)
+
+# Luigi coordinator (benchmark client) - uses RRR framework
+add_executable(luigi_coordinator
+    src/deptran/luigi/coordinator.cc
+)
+
+target_include_directories(luigi_coordinator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/rrr
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/memdb
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/rusty-cpp/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/yaml-cpp/include
+    ${Boost_INCLUDE_DIRS}
+    ${Python3_INCLUDE_DIRS}
+)
+
+target_compile_options(luigi_coordinator PRIVATE ${BENCH_CXXFLAGS})
+
+target_link_libraries(luigi_coordinator
+    txlog
+    yaml-cpp
+    Boost::system
+    Boost::filesystem
+    Boost::thread
+    Boost::coroutine
+    Boost::context
+    pthread
+    event
+    event_pthreads
+    event_core
+    rocksdb
+    ${CMAKE_DL_LIBS}
+    Python3::Python
+)
+
+# Add dependencies for RPC generation
+add_dependencies(luigi_coordinator txlog rcc_rpc_gen luigi_rpc_gen)
+
+# Luigi RRR server - uses RRR framework for RPC
+add_executable(luigi_server
+    src/deptran/luigi/server.cc
+)
+
+target_include_directories(luigi_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/deptran
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/rrr
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/memdb
+    ${CMAKE_CURRENT_SOURCE_DIR}/third-party/rusty-cpp/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/yaml-cpp/include
+    ${Boost_INCLUDE_DIRS}
+    ${Python3_INCLUDE_DIRS}
+)
+
+target_compile_options(luigi_server PRIVATE ${BENCH_CXXFLAGS})
+
+target_link_libraries(luigi_server
+    txlog
+    yaml-cpp
+    Boost::system
+    Boost::filesystem
+    Boost::thread
+    Boost::coroutine
+    Boost::context
+    pthread
+    event
+    event_pthreads
+    event_core
+    rocksdb
+    ${CMAKE_DL_LIBS}
+    Python3::Python
+)
+
+# Add dependencies for RPC generation
+add_dependencies(luigi_server txlog rcc_rpc_gen luigi_rpc_gen)
+
+
 add_apps(simpleTransaction examples/simpleTransaction.cc)
 add_apps(simpleTransactionRep examples/simpleTransactionRep.cc)
 add_apps(continuousTransactions examples/continuousTransactions.cc)
@@ -935,6 +1037,9 @@ add_apps(paxos_async_commit_test src/mako/benchmarks/paxos_async_commit_test.cc)
 add_apps(basic src/mako/benchmarks/ut/basic.cc)
 add_apps(erpc_client src/mako/benchmarks/ut/erpc_client.cc)
 add_apps(erpc_server src/mako/benchmarks/ut/erpc_server.cc)
+
+# Luigi benchmark (Tiga-style stored-procedure benchmark)
+
 
 # RPC benchmark binary
 add_executable(rpcbench test/rpcbench.cc test/benchmark_service.cc)

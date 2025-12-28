@@ -1,0 +1,19 @@
+# Luigi 2-Shard 1-Replica Configuration (No Replication)
+# Mako-compatible format with 1 replica per shard
+
+site:
+  server:  # 2 shards, 1 replica each (no replication)
+    - ["s101:31850"]  # Shard 0
+    - ["s201:31853"]  # Shard 1
+  client:
+    - ["c01"]
+
+process:
+  s101: s101  # Shard 0 - single replica
+  s201: s201  # Shard 1 - single replica
+  c01: c01
+
+host:
+  s101: 127.0.0.1
+  s201: 127.0.0.1
+  c01: 127.0.0.1

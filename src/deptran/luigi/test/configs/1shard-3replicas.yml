@@ -1,0 +1,21 @@
+# Luigi 1-Shard with Replication Test Configuration
+# Mako-compatible format with 3 replicas for Paxos
+# Based on Mako's 1c1s3r1p.yml pattern
+
+site:
+  server:  # 1 shard with 3 replicas (Paxos)
+    - ["s101:31850", "s102:31851", "s103:31852"]
+  client:
+    - ["c01"]
+
+process:
+  s101: s101  # leader replica
+  s102: s102  # follower replica
+  s103: s103  # follower replica
+  c01: c01
+
+host:
+  s101: 127.0.0.1
+  s102: 127.0.0.1
+  s103: 127.0.0.1
+  c01: 127.0.0.1

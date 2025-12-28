@@ -1,0 +1,7 @@
+namespace hello;
+
+abstract service HelloService {
+    defer SayHello(string name | string greeting);
+    defer Echo(string message | string response);
+    defer AsyncCompute(i32 value | i32 result);
+}

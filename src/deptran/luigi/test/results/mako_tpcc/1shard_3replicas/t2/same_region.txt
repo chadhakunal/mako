@@ -1,0 +1,830 @@
+nohup: ignoring input
+=== Mako TPC-C: 1-Shard 3-Replica ===
+Duration: 10s
+Threads: 2
+Network: 2ms ± 0.5ms
+
+Applying network latency: 2ms ± 0.5ms (pareto)...
+qdisc netem 8094: root refcnt 2 limit 1000 delay 2ms  499us
+
+Starting shard 0 replicas...
+  Starting leader (localhost)...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  1
+  Shard index:       0
+  Number of threads: 2
+  Cluster:           localhost
+  Micro benchmark:   disabled
+  Replicated mode:   enabled
+=========================================
+20251126-19:34.31-795996(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:78] 2025-12-26 19:34:31.796 | PWD : /root/cse532/mako
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:276] 2025-12-26 19:34:31.796 | starting process 106634
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:31.796 | LoadYML: config/1leader_2followers/paxos2_shardidx0.yml
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:31.797 | LoadYML: config/occ_paxos.yml
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:285] 2025-12-26 19:34:31.797 | server_infos, number of sites: 2, proc_name: localhost
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:31.810 | parition id of each Paxos group is 1, site-name: s102, site-id: 4
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:31.823 | parition id of each Paxos group is 0, site-name: s101, site-id: 0
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:297] 2025-12-26 19:34:31.823 | running machine-id: 0
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:31.823 | launching site: 0, bind address 0.0.0.0:17001
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:106] 2025-12-26 19:34:31.823 | waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:31.823 | launching site: 4, bind address 0.0.0.0:17002
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:31.823 | [service]loc_id: 0, name: s101, proc: localhost, id: 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:31.823 | [service]loc_id: 0, name: s102, proc: localhost, id: 4
+starting server at 0.0.0.0:17001
+starting server at 0.0.0.0:17002
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:31.823 | Server s101 ready at 0.0.0.0:17001I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:31.823 | Server s102 ready at 0.0.0.0:17002
+
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:31.823 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:31.823 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:31.828 | connect to site: 127.0.0.1:17001 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:31.829 | connect to site: 127.0.0.1:17001 success!
+  Starting follower 1 (p1)...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  1
+  Shard index:       0
+  Number of threads: 2
+  Cluster:           p1
+  Micro benchmark:   disabled
+  Replicated mode:   enabled
+=========================================
+20251126-19:34.33-794596(us) 106658 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:78] 2025-12-26 19:34:33.795 | PWD : /root/cse532/mako
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:276] 2025-12-26 19:34:33.795 | starting process 106658
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:33.795 | LoadYML: config/1leader_2followers/paxos2_shardidx0.yml
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:33.795 | LoadYML: config/occ_paxos.yml
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:285] 2025-12-26 19:34:33.795 | server_infos, number of sites: 2, proc_name: p1
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:33.807 | parition id of each Paxos group is 1, site-name: s202, site-id: 5
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:33.820 | parition id of each Paxos group is 0, site-name: s201, site-id: 1
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:297] 2025-12-26 19:34:33.820 | running machine-id: 1
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:33.820 | launching site: 1, bind address 0.0.0.0:17101
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:106] 2025-12-26 19:34:33.820 | waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:33.820 | launching site: 5, bind address 0.0.0.0:17102
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:33.821 | [service]loc_id: 1, name: s201, proc: p1, id: 1
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:33.821 | [service]loc_id: 1, name: s202, proc: p1, id: 5
+starting server at 0.0.0.0:17101
+starting server at 0.0.0.0:17102
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:33.821 | Server s201 ready at 0.0.0.0:17101
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:33.821 | Server s202 ready at 0.0.0.0:17102
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:33.821 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:33.821 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.825 | connect to site: 127.0.0.1:17001 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.827 | connect to site: 127.0.0.1:17001 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.830 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.831 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.839 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:33.841 | connect to site: 127.0.0.1:17101 success!
+  Starting follower 2 (p2)...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  1
+  Shard index:       0
+  Number of threads: 2
+  Cluster:           p2
+  Micro benchmark:   disabled
+  Replicated mode:   enabled
+=========================================
+20251126-19:34.35-799017(us) 106683 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:78] 2025-12-26 19:34:35.799 | PWD : /root/cse532/mako
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:276] 2025-12-26 19:34:35.799 | starting process 106683
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:35.799 | LoadYML: config/1leader_2followers/paxos2_shardidx0.yml
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:35.799 | LoadYML: config/occ_paxos.yml
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:285] 2025-12-26 19:34:35.799 | server_infos, number of sites: 2, proc_name: p2
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:35.813 | parition id of each Paxos group is 1, site-name: s302, site-id: 6
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:35.827 | parition id of each Paxos group is 0, site-name: s301, site-id: 2
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:297] 2025-12-26 19:34:35.827 | running machine-id: 2
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:35.827 | launching site: 2, bind address 0.0.0.0:17201
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:106] 2025-12-26 19:34:35.827 | waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:35.827 | launching site: 6, bind address 0.0.0.0:17202
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:35.827 | [service]loc_id: 2, name: s301, proc: p2, id: 2
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:35.827 | [service]loc_id: 2, name: s302, proc: p2, id: 6
+starting server at 0.0.0.0:17201
+starting server at 0.0.0.0:17202
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:35.828 | Server s301 ready at 0.0.0.0:17201
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:35.828 | Server s302 ready at 0.0.0.0:17202
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:35.828 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:35.828 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.832 | connect to site: 127.0.0.1:17001 success!I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.832 | connect to site: 127.0.0.1:17001 success!
+
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.836 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.837 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.840 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.840 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.842 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.843 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.851 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:35.852 | connect to site: 127.0.0.1:17201 success!
+  Starting learner...
+Running benchmark for 10 seconds...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  1
+  Shard index:       0
+  Number of threads: 2
+  Cluster:           learner
+  Micro benchmark:   disabled
+  Replicated mode:   enabled
+=========================================
+20251126-19:34.37-798120(us) 106732 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:78] 2025-12-26 19:34:37.798 | PWD : /root/cse532/mako
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:276] 2025-12-26 19:34:37.798 | starting process 106732
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:37.798 | LoadYML: config/1leader_2followers/paxos2_shardidx0.yml
+I [/root/cse532/mako/src/deptran/config.cc:272] 2025-12-26 19:34:37.798 | LoadYML: config/occ_paxos.yml
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:285] 2025-12-26 19:34:37.799 | server_infos, number of sites: 2, proc_name: learner
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:37.811 | parition id of each Paxos group is 1, site-name: s402, site-id: 7
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:291] 2025-12-26 19:34:37.824 | parition id of each Paxos group is 0, site-name: s401, site-id: 3
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:297] 2025-12-26 19:34:37.824 | running machine-id: 3
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:37.825 | launching site: 3, bind address 0.0.0.0:17301
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:106] 2025-12-26 19:34:37.825 | waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:92] 2025-12-26 19:34:37.825 | launching site: 7, bind address 0.0.0.0:17302
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:37.825 | [service]loc_id: 3, name: s401, proc: learner, id: 3
+starting server at 0.0.0.0:17301
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:198] 2025-12-26 19:34:37.825 | [service]loc_id: 3, name: s402, proc: learner, id: 7
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:37.825 | Server s401 ready at 0.0.0.0:17301
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:37.826 | setup paxos communicator
+starting server at 0.0.0.0:17302
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:221] 2025-12-26 19:34:37.826 | Server s402 ready at 0.0.0.0:17302
+I [/root/cse532/mako/src/deptran/communicator.cc:62] 2025-12-26 19:34:37.826 | setup paxos communicator
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.829 | connect to site: 127.0.0.1:17001 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.829 | connect to site: 127.0.0.1:17001 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.833 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.833 | connect to site: 127.0.0.1:17101 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.837 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.838 | connect to site: 127.0.0.1:17201 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.841 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.842 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.845 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.846 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.849 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.851 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.852 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.852 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.854 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.855 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.855 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.855 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.856 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.857 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.858 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.858 | site 3 launched!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.858 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.858 | site 7 launched!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:110] 2025-12-26 19:34:37.859 | done waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.859 | heartbeat setup for s401 on 0.0.0.0:27301
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.859 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.859 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.859 | heartbeat setup for s402 on 0.0.0.0:27302
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:117] 2025-12-26 19:34:37.859 | server workers' communicators setup
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.859 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:756] 2025-12-26 19:34:37.860 | start a heartbeatBackground, addr:127.0.0.1:27001
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.861 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.863 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.863 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.863 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.864 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.864 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.865 | connect to site: 127.0.0.1:17301 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.867 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.867 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.867 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.867 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.867 | site 2 launched!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.868 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.868 | site 6 launched!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:110] 2025-12-26 19:34:37.868 | done waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.868 | connect to site: 127.0.0.1:17002 success!
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.868 | heartbeat setup for s301 on 0.0.0.0:27201
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.869 | heartbeat setup for s302 on 0.0.0.0:27202
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:117] 2025-12-26 19:34:37.869 | server workers' communicators setup
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.870 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.870 | site 5 launched!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.871 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.871 | site 1 launched!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:110] 2025-12-26 19:34:37.871 | done waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.871 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.871 | heartbeat setup for s201 on 0.0.0.0:27101
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.872 | heartbeat setup for s202 on 0.0.0.0:27102
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:117] 2025-12-26 19:34:37.872 | server workers' communicators setup
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.873 | connect to site: 127.0.0.1:17102 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.875 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.877 | connect to site: 127.0.0.1:17202 success!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.879 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.879 | site 4 launched!
+I [/root/cse532/mako/src/deptran/communicator.cc:320] 2025-12-26 19:34:37.880 | connect to site: 127.0.0.1:17302 success!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:103] 2025-12-26 19:34:37.880 | site 0 launched!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:110] 2025-12-26 19:34:37.880 | done waiting for server setup threads.
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.881 | heartbeat setup for s101 on 0.0.0.0:27001
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:255] 2025-12-26 19:34:37.881 | heartbeat setup for s102 on 0.0.0.0:27002
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:117] 2025-12-26 19:34:37.881 | server workers' communicators setup
+tpcc settings:
+  cross_partition_transactions : 1
+  read_only_snapshots          : 1
+  partition_locks              : 0
+  separate_tree_per_partition  : 1
+  new_order_remote_item_pct    : 1
+  new_order_fast_id_gen        : 1
+  uniform_item_dist            : 0
+  order_status_scan_hack       : 0
+  workload_mix                 : [45, 43, 4, 4, 4]
+20251126-19:34.40-860883(us) 106732 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.40-860962(us) 106732 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+reinitializing partitions under failure
+reinitializing partitions under failure - DONE
+[TRANSPORT] Using default: rrr
+[TRANSPORT] Using default: rrr
+20251126-19:34.40-861305(us) 106732 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.40-861365(us) 106732 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.40-861465(us) 106732 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:34007 (listening on 0.0.0.0:34007)
+20251126-19:34.40-861525(us) 106732 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:34007
+20251126-19:34.40-861578(us) 106732 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-19:34.40-861627(us) 106732 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:34008 (listening on 0.0.0.0:34008)
+20251126-19:34.40-861664(us) 106732 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:34008
+20251126-19:34.40-861694(us) 106732 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-19:34.40-861725(us) 106732 ! modeMonitor     (common2.h:120):    start for modeMonitor, running:0
+start worker:1676
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f91c81ff000, 0x7f92083ff000)
+  runtime0 cpu0 owns [0x7f91c8200000, 0x7f91e8200000)
+  runtime0 cpu1 owns [0x7f91e8200000, 0x7f9208200000)
+Database Benchmark:
+  pid: 106732
+settings:
+  num-cpus    : 8
+  num-threads : 2
+  shardIndex  : 0
+  paxos_proc_name  : learner
+  nshards     : 1
+  is_micro    : 0
+  is_replicated : 1
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f8bb0a00000, 0x7f8bf0c00000)
+  runtime0 cpu0 owns [0x7f8bb0a00000, 0x7f8bd0a00000)
+  runtime0 cpu1 owns [0x7f8bd0a00000, 0x7f8bf0a00000)
+Database Benchmark:
+  pid: 106683
+settings:
+  num-cpus    : 8
+  num-threads : 2
+  shardIndex  : 0
+  paxos_proc_name  : p2
+  nshards     : 1
+  is_micro    : 0
+  is_replicated : 1
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f0676e00000, 0x7f06b7000000)
+  runtime0 cpu0 owns [0x7f0676e00000, 0x7f0696e00000)
+  runtime0 cpu1 owns [0x7f0696e00000, 0x7f06b6e00000)
+Database Benchmark:
+  pid: 106658
+settings:
+  num-cpus    : 8
+  num-threads : 2
+  shardIndex  : 0
+  paxos_proc_name  : p1
+  nshards     : 1
+  is_micro    : 0
+  is_replicated : 1
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+Leader initializing RocksDB at path: /tmp/root_mako_rocksdb_shard0_leader_pid106634 with 2 partitions and 2 worker threads
+[RocksDB] Partition 0: opened database at /tmp/root_mako_rocksdb_shard0_leader_pid106634_partition0
+[RocksDB] Partition 1: opened database at /tmp/root_mako_rocksdb_shard0_leader_pid106634_partition1
+[RocksDB] Initialized with 2 partitions and 2 worker threads
+[RocksDB] Metadata written: epoch:1,shard_id:0,num_shards:1,num_partitions:2,num_workers:2,timestamp:1766777680
+[RocksDB] Metadata written: epoch:0,shard_id:0,num_shards:1,num_partitions:2,num_workers:2,timestamp:1766777680
+[RocksDB] Epoch changed from 1 to 0, metadata updated
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f0ba6fee000, 0x7f0be71ee000)
+  runtime0 cpu0 owns [0x7f0ba7000000, 0x7f0bc7000000)
+  runtime0 cpu1 owns [0x7f0bc7000000, 0x7f0be7000000)
+Database Benchmark:
+  pid: 106634
+settings:
+  num-cpus    : 8
+  num-threads : 2
+  shardIndex  : 0
+  paxos_proc_name  : localhost
+  nshards     : 1
+  is_micro    : 0
+  is_replicated : 1
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+tpcc settings:
+  cross_partition_transactions : 1
+  read_only_snapshots          : 1
+  partition_locks              : 0
+  separate_tree_per_partition  : 1
+  new_order_remote_item_pct    : 1
+  new_order_fast_id_gen        : 1
+  uniform_item_dist            : 0
+  order_status_scan_hack       : 0
+  workload_mix                 : [45, 43, 4, 4, 4]
+new table is createded with name: customer_0, table-id: 1, on shard-server id:0
+new table is createded with name: customer_1, table-id: 2, on shard-server id:0
+new table is createded with name: customer_name_idx_0, table-id: 3, on shard-server id:0
+new table is createded with name: customer_name_idx_1, table-id: 4, on shard-server id:0
+new table is createded with name: district_0, table-id: 5, on shard-server id:0
+new table is createded with name: district_1, table-id: 6, on shard-server id:0
+new table is createded with name: history_0, table-id: 7, on shard-server id:0
+new table is createded with name: history_1, table-id: 8, on shard-server id:0
+new table is createded with name: new_order_0, table-id: 9, on shard-server id:0
+new table is createded with name: new_order_1, table-id: 10, on shard-server id:0
+new table is createded with name: oorder_0, table-id: 11, on shard-server id:0
+new table is createded with name: oorder_1, table-id: 12, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_0, table-id: 13, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_1, table-id: 14, on shard-server id:0
+new table is createded with name: order_line_0, table-id: 15, on shard-server id:0
+new table is createded with name: order_line_1, table-id: 16, on shard-server id:0
+new table is createded with name: stock_0, table-id: 17, on shard-server id:0
+new table is createded with name: stock_1, table-id: 18, on shard-server id:0
+new table is createded with name: stock_data_0, table-id: 19, on shard-server id:0
+new table is createded with name: stock_data_1, table-id: 20, on shard-server id:0
+new table is createded with name: warehouse_0, table-id: 21, on shard-server id:0
+new table is createded with name: warehouse_1, table-id: 22, on shard-server id:0
+new table is createded with name: item, table-id: 23, on shard-server id:0
+20251126-19:34.40-900243(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.40-900348(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+[TRANSPORT] Using default: rrr
+20251126-19:34.40-900575(us) 106634 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.40-900640(us) 106634 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.40-900709(us) 106634 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31007 (listening on 0.0.0.0:31007)
+20251126-19:34.40-900757(us) 106634 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31007
+20251126-19:34.40-900797(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-19:34.40-900838(us) 106634 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31008 (listening on 0.0.0.0:31008)
+20251126-19:34.40-900883(us) 106634 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31008
+20251126-19:34.40-900919(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-19:34.40-903501(us) 106634 ! run             (bench.cc:398):     # of loaders size:6
+20251126-19:34.40-904485(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=0, shard_index=0, getShardIndex=0, loader=1
+20251126-19:34.40-904668(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=1, shard_index=0, getShardIndex=0, loader=1
+start worker:1654
+[INFO] finished loading warehouse
+[INFO]   * average warehouse record length: 97 bytes
+[RocksDB Pending] partition=0, pending=1 (total_pending=1)
+[RocksDB Pending] partition=1, pending=1 (total_pending=1)
+[INFO] finished loading item
+[INFO]   * average item record length: 84.1739 bytes
+20251126-19:34.41-165155(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=2, shard_index=0, getShardIndex=0, loader=1
+20251126-19:34.41-165270(us) 106634 * PinToWarehouseId(): coreid=2 pinned to whse=1 (partid=0)
+thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=3, shard_index=0, getShardIndex=0, loader=1
+PinToWarehouseId(): coreid=3 pinned to whse=1 (partid=0)
+PinToWarehouseId(): coreid=3 pinned to whse=2 (partid=1)
+[INFO] finished loading district
+[INFO]   * average district record length: 99 bytes
+20251126-19:34.41-862465(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:5, wait_time:1s
+
+20251126-19:34.41-869892(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:5, wait_time:1s
+
+20251126-19:34.41-872754(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:5, wait_time:1s
+
+PinToWarehouseId(): coreid=2 pinned to whse=2 (partid=1)
+20251126-19:34.42-862663(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:8, wait_time:2s
+
+20251126-19:34.42-870025(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:8, wait_time:2s
+
+20251126-19:34.42-872891(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:8, wait_time:2s
+
+[INFO] finished loading stock
+[INFO]   * average stock record length: 8 bytes
+20251126-19:34.43-340182(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=4, shard_index=0, getShardIndex=0, loader=1
+PinToWarehouseId(): coreid=5 pinned to whse=1 (partid=0)
+20251126-19:34.43-340665(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=5, shard_index=0, getShardIndex=0, loader=1
+num batches: 30
+PinToWarehouseId(): coreid=4 pinned to whse=1 (partid=0)
+PinToWarehouseId(): coreid=5 pinned to whse=2 (partid=1)
+[RocksDB Pending] partition=0, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=0, success=100, failed=0
+PinToWarehouseId(): coreid=4 pinned to whse=2 (partid=1)
+[INFO] finished loading order
+[INFO]   * average order_line record length: 11.1187 bytes
+[INFO]   * average oorder record length: 7.7038 bytes
+[INFO]   * average new_order record length: 12 bytes
+20251126-19:34.43-862785(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:9, wait_time:3s
+
+20251126-19:34.43-870449(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:57, wait_time:3s
+
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:43.871 | created 1024, busy 1023, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+20251126-19:34.43-873047(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:48, wait_time:3s
+
+[INFO] finished loading customer
+[INFO]   * average customer record length: 153.862 bytes 
+timed region dataloading took 3457.9 ms
+DB size: 1880.96 MB
+[0, 0, 0] txns persisted in loading phase
+20251126-19:34.44-361818(us) 106634 ! run             (bench.cc:451):     # of nthreads:2
+starting benchmark...
+--------------Finish loading data and wait for others completing load phase ------------
+[ADVANCER-SEND] Leader sending ADVANCER_MARKER to 2 partitions
+[ADVANCER-SEND] Sent ADVANCER_MARKER to partition 0
+[ADVANCER-SEND] Sent ADVANCER_MARKER to partition 1
+tpcc: worker id 8 => warehouses [1, 2)
+tpcc: worker id 9 => warehouses [2, 3)
+we can start a advancer
+start the advancer thread...
+we can start a advancer
+start the advancer thread...
+we can start a advancer
+start the advancer thread...
+No JEMALLOC_NO_RENAME
+No JEMALLOC_NO_RENAME
+20251126-19:34.44-382735(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=6, shard_index=0, getShardIndex=0, loader=0
+20251126-19:34.44-383204(us) 106634 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=7, shard_index=0, getShardIndex=0, loader=0
+20251126-19:34.44-383958(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.44-384619(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.44-385289(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.44-385872(us) 106634 * [TRANSPORT] Using default: rrr
+ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-19:34.44-387074(us) 106634 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.44-387697(us) 106634 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-19:34.44-388692(us) 106634 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31001 (listening on 0.0.0.0:31001)
+20251126-19:34.44-389345(us) 106634 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31001
+20251126-19:34.44-389930(us) 106634 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31000 (listening on 0.0.0.0:31000)
+20251126-19:34.44-389983(us) 106634 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31000
+20251126-19:34.44-390246(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.44-390644(us) 106634 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-19:34.44-396670(us) 106634 ! run             (bench.cc:511):     start the running time, runTime:10
+20251126-19:34.44-397279(us) 106634 ! run             (bench.cc:523):     runtime time left:10000 ms, bool:1
+20251126-19:34.44-862959(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:87, wait_time:4s
+
+20251126-19:34.44-870604(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:196, wait_time:4s
+
+20251126-19:34.44-873181(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:195, wait_time:4s
+
+[RocksDB Pending] partition=0, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=0, success=200, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:45.045 | created 2048, busy 2047, idle 0 coroutines on server 0, recent :0
+we can start a advancer
+start the advancer thread...
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:45.163 | created 1024, busy 1023, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.45-415950(us) 106634 ! run             (bench.cc:523):     runtime time left:9000 ms, bool:1
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:45.650 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+[RocksDB Pending] partition=1, pending=1 (total_pending=1)
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:45.712 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+[RocksDB Helper] par_id=1, success=100, failed=0
+20251126-19:34.45-863302(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:250, wait_time:5s
+
+20251126-19:34.45-871466(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:383, wait_time:5s
+
+20251126-19:34.45-873353(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:381, wait_time:5s
+
+[RocksDB Helper] par_id=0, success=300, failed=0
+[RocksDB Pending] partition=0, pending=0 (total_pending=0)
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:46.299 | created 3072, busy 3071, idle 0 coroutines on server 0, recent :0
+20251126-19:34.46-423754(us) 106634 ! run             (bench.cc:523):     runtime time left:8000 ms, bool:1
+20251126-19:34.46-863607(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:352, wait_time:6s
+
+20251126-19:34.46-871612(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:544, wait_time:6s
+
+20251126-19:34.46-874201(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:545, wait_time:6s
+
+[RocksDB Pending] partition=1, pending=0 (total_pending=0)
+[RocksDB Helper] par_id=1, success=200, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:47.022 | created 2048, busy 2047, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.47-435234(us) 106634 ! run             (bench.cc:523):     runtime time left:7000 ms, bool:1
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:47.484 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+[RocksDB Helper] par_id=0, success=400, failed=0
+[RocksDB Pending] partition=0, pending=0 (total_pending=0)
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:47.694 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:47.721 | created 4096, busy 4095, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:47.723 | created 2048, busy 2047, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.47-863764(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:534, wait_time:7s
+
+20251126-19:34.47-871758(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:681, wait_time:7s
+
+20251126-19:34.47-875135(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:681, wait_time:7s
+
+[RocksDB Pending] partition=1, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=1, success=300, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:48.406 | created 3072, busy 3071, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.48-447467(us) 106634 ! run             (bench.cc:523):     runtime time left:6000 ms, bool:1
+20251126-19:34.48-863921(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:742, wait_time:8s
+
+20251126-19:34.48-871916(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:831, wait_time:8s
+
+20251126-19:34.48-875339(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:830, wait_time:8s
+
+[RocksDB Helper] par_id=0, success=500, failed=0
+[RocksDB Pending] partition=0, pending=0 (total_pending=0)
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:49.120 | created 2048, busy 2047, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:49.125 | created 5120, busy 5119, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:49.166 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+20251126-19:34.49-462826(us) 106634 ! run             (bench.cc:523):     runtime time left:5000 ms, bool:1
+[RocksDB Pending] partition=1, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=1, success=400, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:49.767 | created 4096, busy 4095, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:49.819 | created 2048, busy 2047, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+20251126-19:34.49-864088(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:955, wait_time:9s
+
+20251126-19:34.49-872916(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:974, wait_time:9s
+
+20251126-19:34.49-876251(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:974, wait_time:9s
+
+[RocksDB Pending] partition=0, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=0, success=600, failed=0
+20251126-19:34.50-481345(us) 106634 ! run             (bench.cc:523):     runtime time left:4000 ms, bool:1
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:50.586 | created 6144, busy 6143, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:50.634 | created 3072, busy 3071, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.50-864245(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1096, wait_time:10s
+
+20251126-19:34.50-873053(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1116, wait_time:10s
+
+20251126-19:34.50-878583(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1116, wait_time:10s
+
+[RocksDB Pending] partition=1, pending=0 (total_pending=0)
+[RocksDB Helper] par_id=1, success=500, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:51.328 | created 2048, busy 2047, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:51.337 | created 5120, busy 5119, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:51.357 | created 1024, busy 1023, idle 0 coroutines on server 0, recent :0
+20251126-19:34.51-488717(us) 106634 ! run             (bench.cc:523):     runtime time left:3000 ms, bool:1
+[RocksDB Pending] partition=0, pending=1 (total_pending=1)
+[RocksDB Helper] par_id=0, success=700, failed=0
+20251126-19:34.51-864924(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1252, wait_time:11s
+
+20251126-19:34.51-873207(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1253, wait_time:11s
+
+20251126-19:34.51-878724(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1257, wait_time:11s
+
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:51.952 | created 7168, busy 7167, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+20251126-19:34.52-507577(us) 106634 ! run             (bench.cc:523):     runtime time left:2000 ms, bool:1
+[RocksDB Pending] partition=1, pending=0 (total_pending=0)
+[RocksDB Helper] par_id=1, success=600, failed=0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:52.677 | created 3072, busy 3071, idle 0 coroutines on server 0, recent :0
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:52.718 | created 6144, busy 6143, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:52.740 | created 3072, busy 3071, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.52-865083(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1389, wait_time:12s
+
+20251126-19:34.52-873356(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1403, wait_time:12s
+
+20251126-19:34.52-878872(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1401, wait_time:12s
+
+[RocksDB Helper] par_id=0, success=800, failed=0
+[RocksDB Pending] partition=0, pending=0 (total_pending=0)
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:53.399 | created 8192, busy 8191, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/client.cpp:97
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:53.403 | created 4096, busy 4095, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:53.444 | created 1024, busy 1023, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+20251126-19:34.53-517010(us) 106634 ! run             (bench.cc:523):     runtime time left:1000 ms, bool:1
+[RocksDB Pending] partition=1, pending=0 (total_pending=1)
+20251126-19:34.53-865817(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1548, wait_time:13s
+
+20251126-19:34.53-873507(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1553, wait_time:13s
+
+[RocksDB Helper] par_id=1, success=700, failed=0
+20251126-19:34.53-879506(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1552, wait_time:13s
+
+I [/root/cse532/mako/src/rrr/reactor/reactor.cc:116] 2025-12-26 19:34:54.092 | created 7168, busy 7167, idle 0 coroutines on server 0, recent /root/cse532/mako/src/rrr/rpc/server.cpp:243
+[RocksDB Pending] partition=0, pending=1 (total_pending=2)
+[RocksDB Helper] par_id=0, success=900, failed=0
+20251126-19:34.54-527497(us) 106634 ! run             (bench.cc:533):     runtime_plus:0
+[SHUTDOWN] Setting running=false to stop database worker threads
+[SHUTDOWN] Calling first stop() to stop client transports
+20251126-19:34.54-527619(us) 106634 jump out the while loop
+! stop            (bench.cc:373):     stop all erpc clients. set stop=falsejump out the while loop
+
+20251126-19:34.54-527690(us) 106634 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-19:34.54-527727(us) 106634 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-19:34.54-527763(us) 106634 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-19:34.54-527798(us) 106634 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-19:34.54-527833(us) 106634 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-19:34.54-527868(us) 106634 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-19:34.54-527903(us) 106634 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-19:34.54-527938(us) 106634 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-19:34.54-527972(us) 106634 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-19:34.54-528006(us) 106634 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.54-528042(us) 106634 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+20251126-19:34.54-528077(us) 106634 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-19:34.54-528125(us) 106634 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-19:34.54-528159(us) 106634 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-19:34.54-528194(us) 106634 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-19:34.54-528228(us) 106634 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-19:34.54-528262(us) 106634 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-19:34.54-528297(us) 106634 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-19:34.54-528331(us) 106634 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-19:34.54-528365(us) 106634 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-19:34.54-528399(us) 106634 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.54-528433(us) 106634 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[SHUTDOWN] First stop() completed
+[SHUTDOWN] Joining 2 worker threads
+[SHUTDOWN] Joining worker 0
+20251126-19:34.54-530673(us) 106634 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.54-530757(us) 106634 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.54-866053(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1651, wait_time:14s
+
+20251126-19:34.54-873660(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1651, wait_time:14s
+
+20251126-19:34.54-879632(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 0/2, noops_cnt:0, replay_batch:1651, wait_time:14s
+
+[SHUTDOWN] Worker 0 joined
+[SHUTDOWN] Joining worker 1
+[SHUTDOWN] Worker 1 joined
+[SHUTDOWN] All workers joined
+[SHUTDOWN] Calling stop_erpc_server()
+[STOP_SERVER] Stopping 2 server transports
+[STOP_SERVER] Stopping server transport 0
+20251126-19:34.55-531536(us) 106634 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-19:34.55-531597(us) 106634 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-19:34.55-531643(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:583): RrrRpcBackend::RunEventLoop: Stop flag detected, exiting event loop
+20251126-19:34.55-531697(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:587): RrrRpcBackend::RunEventLoop: Exited cleanly
+20251126-19:34.55-531753(us) 106634 * erpc_server     (rpc_setup.cc:121): the erpc_server is terminated on shardIdx:0, alpha:0!
+20251126-19:34.55-541705(us) 106634 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-19:34.55-541956(us) 106634 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-19:34.55-541997(us) 106634 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-19:34.55-542036(us) 106634 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-19:34.55-542072(us) 106634 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-19:34.55-542107(us) 106634 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-19:34.55-542140(us) 106634 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-19:34.55-542174(us) 106634 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.55-542211(us) 106634 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[STOP_SERVER] Server transport 0 stopped
+[STOP_SERVER] Stopping server transport 1
+20251126-19:34.55-542288(us) 106634 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-19:34.55-542341(us) 106634 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-19:34.55-542394(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:583): RrrRpcBackend::RunEventLoop: Stop flag detected, exiting event loop
+20251126-19:34.55-542435(us) 106634 * RunEventLoop    (rrr_rpc_backend.cc:587): RrrRpcBackend::RunEventLoop: Exited cleanly
+20251126-19:34.55-542469(us) 106634 * erpc_server     (rpc_setup.cc:121): the erpc_server is terminated on shardIdx:0, alpha:1!
+20251126-19:34.55-552451(us) 106634 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-19:34.55-552508(us) 106634 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-19:34.55-552543(us) 106634 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-19:34.55-552596(us) 106634 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-19:34.55-552630(us) 106634 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-19:34.55-552677(us) 106634 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-19:34.55-552711(us) 106634 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-19:34.55-552760(us) 106634 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-19:34.55-552795(us) 106634 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[STOP_SERVER] Server transport 1 stopped
+[STOP_SERVER] All server transports stopped
+[SHUTDOWN] stop_erpc_server() completed
+[SHUTDOWN] Calling second stop()
+20251126-19:34.55-552896(us) 106634 ! stop            (bench.cc:373):     stop all erpc clients. set stop=false
+[SHUTDOWN] Second stop() completed
+[SHUTDOWN] Calling do_txn_finish()
+[SHUTDOWN] do_txn_finish() completed
+--- n_commits per partition ---
+ par_id: 0, n_commits: 322628
+ par_id: 1, n_commits: 325945
+--- benchmark statistics ---
+runtime: 10.1564 sec
+memory delta: 6199.11 MB
+n_commits: 648573
+latency_numer_us: 19865663
+latency_numer_us_remote: 0
+memory delta rate: 610.366 MB/sec
+logical memory delta: 41.1512 MB
+logical memory delta rate: 4.05176 MB/sec
+agg_nosync_throughput: 63859.3 ops/sec
+avg_nosync_per_core_throughput: 31929.7 ops/sec/core
+agg_throughput: 63858.7 ops/sec
+avg_per_core_throughput: 31929.3 ops/sec/core
+agg_persist_throughput: 63858.7 ops/sec
+avg_per_core_persist_throughput: 31929.3 ops/sec/core
+avg_latency: 0.0306298 ms
+avg_persist_latency: 0 ms
+agg_abort_rate: 10.7322 aborts/sec
+avg_per_core_abort_rate: 5.36608 aborts/sec/core
+  NewOrder_local_commit_latency: 0.0348927 ms
+  NewOrder_local_abort_latency: 0.108128 ms
+  NewOrder_local_abort_ratio: 0.000164429
+  Payment_local_commit_latency: 0.012201 ms
+  Payment_local_abort_latency: 0.020085 ms
+  Payment_local_abort_ratio: 7.16633e-06
+  Delivery_local_commit_latency: 0.121126 ms
+  Delivery_local_abort_latency: -nan ms
+  Delivery_local_abort_ratio: 0
+  OrderStatus_local_commit_latency: 0.00870244 ms
+  OrderStatus_local_abort_latency: -nan ms
+  OrderStatus_local_abort_ratio: 0
+  StockLevel_local_commit_latency: 0.124865 ms
+  StockLevel_local_abort_latency: 0.138171 ms
+  StockLevel_local_abort_ratio: 0.00228355
+  NewOrder_remote_ratio: 0 %
+  NewOrder_remote_abort_ratio: -nan %
+  NewOrder_remote_commit_latency: -nan ms
+  NewOrder_remote_abort_latency: -nan ms
+  Payment_remote_ratio: 0 %
+  Payment_remote_abort_ratio: -nan %
+  Payment_remote_commit_latency: -nan ms
+  Payment_remote_abort_latency: -nan ms
+--- system counters (for benchmark) ---
+--- perf counters (if enabled, for benchmark) ---
+--- allocator stats ---
+[SiloRuntime 0] ncpus=2
+[SiloRuntime 0] cpu=0 fully_faulted?=0 remaining=536870912 bytes
+[SiloRuntime 0] cpu=1 fully_faulted?=0 remaining=536870912 bytes
+---------------------------------------
+--- system counters for n_comits ---
+[STOP_SERVER] Stopping 2 server transports
+[STOP_SERVER] Stopping server transport 0
+20251126-19:34.55-554472(us) 106634 * Stop            (rrr_rpc_backend.cc:595): RrrRpcBackend::Stop: Already stopped, returning
+[STOP_SERVER] Server transport 0 stopped
+[STOP_SERVER] Stopping server transport 1
+20251126-19:34.55-554538(us) 106634 * Stop            (rrr_rpc_backend.cc:595): RrrRpcBackend::Stop: Already stopped, returning
+[STOP_SERVER] Server transport 1 stopped
+[STOP_SERVER] All server transports stopped
+20251126-19:34.55-554624(us) 106634 ! send_end_signal (mako.hh:858):      ######--------------###### send endLlogs #####---------------######
+20251126-19:34.55-554666(us) 106634 * db_close        (mako.hh:885):      Leader sent end signal, waiting 3 seconds for propagation...
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+20251126-19:34.55-562121(us) 106683 ! operator()      (mako.hh:237):      Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+20251126-19:34.55-562407(us) 106634 ! operator()      (mako.hh:395):      Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+20251126-19:34.55-562498(us) 106658 ! I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+operator()      (mako.hh:237):      Recieved a zero length log
+20251126-19:34.55-562534(us) 106634 ! operator()      (mako.hh:395):      Recieved a zero length log
+20251126-19:34.55-562603(us) 106658 ! operator()      (mako.hh:237):      Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.562 | Recieved a zero length log
+20251126-19:34.55-562965(us) 106683 ! operator()      (mako.hh:237):      Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.564 | Recieved a zero length log
+20251126-19:34.55-564482(us) 106732 ! operator()      (mako.hh:237):      Recieved a zero length log
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:140] 2025-12-26 19:34:55.571 | Recieved a zero length log
+20251126-19:34.55-571255(us) 106732 ! operator()      (mako.hh:237):      Recieved a zero length log
+20251126-19:34.55-866191(us) 106732 * wait_for_termination (mako.hh:538):      learner is waiting for being ended: 2/2, noops_cnt:0, replay_batch:1655, wait_time:15s
+
+20251126-19:34.55-873801(us) 106683 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 2/2, noops_cnt:0, replay_batch:1656, wait_time:15s
+
+20251126-19:34.55-879776(us) 106658 * wait_for_termination (mako.hh:542):      follower is waiting for being ended: 2/2, noops_cnt:0, replay_batch:1655, wait_time:15s
+
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:999] 2025-12-26 19:34:57.866 | shutdown Server Control Service after task finish total submit 0
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.866 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.866 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:311] 2025-12-26 19:34:57.866 | all server workers have shut down.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:999] 2025-12-26 19:34:57.873 | shutdown Server Control Service after task finish total submit 0
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.873 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.873 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:311] 2025-12-26 19:34:57.874 | all server workers have shut down.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:770] 2025-12-26 19:34:57.876 | heartbeatBackground is ended!
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:999] 2025-12-26 19:34:57.879 | shutdown Server Control Service after task finish total submit 0
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.879 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:34:57.879 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:311] 2025-12-26 19:34:57.880 | all server workers have shut down.
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:57.966 | site s401 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:57.974 | site s301 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:57.980 | site s201 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.017 | site par 0, loc 3: prepare 0, accept 0, commit 0
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.017 | loc_id=3 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:58.017 | site s402 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.024 | site par 0, loc 2: prepare 0, accept 909, commit 909
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.030 | site par 0, loc 1: prepare 0, accept 909, commit 909
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.034 | loc_id=2 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:58.034 | site s302 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.040 | loc_id=1 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:34:58.040 | site s202 deleting services, num: 1 0 0 0
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.067 | site par 1, loc 3: prepare 0, accept 0, commit 0
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.067 | loc_id=3 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.085 | site par 1, loc 2: prepare 0, accept 751, commit 751
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:34:58.090 | site par 1, loc 1: prepare 0, accept 751, commit 751
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.091 | loc_id=2 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:34:58.096 | loc_id=1 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.117 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.122 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:332] 2025-12-26 19:34:58.126 | exit process.
+20251126-19:34.58-126817(us) 106732 ! modeMonitorRun  (common2.h:101):    start for modeMonitorRun, running:0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.141 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.146 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.180 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:34:58.185 | Ending worker with n_tot 0 and n_current 0
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:332] 2025-12-26 19:34:58.221 | exit process.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:332] 2025-12-26 19:34:58.228 | exit process.
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:999] 2025-12-26 19:35:00.554 | shutdown Server Control Service after task finish total submit 0
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:35:00.554 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/benchmark_control_rpc.cc:43] 2025-12-26 19:35:00.554 | Shutdown Server Control Service
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:311] 2025-12-26 19:35:00.555 | all server workers have shut down.
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:35:00.655 | site s101 deleting services, num: 1 0 909 909
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:35:00.705 | site par 0, loc 0: prepare 0, accept 909, commit 909
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:35:00.716 | loc_id=0 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:288] 2025-12-26 19:35:00.716 | site s102 deleting services, num: 1 0 751 751
+I [/root/cse532/mako/src/deptran/paxos/server.h:57] 2025-12-26 19:35:00.767 | site par 1, loc 0: prepare 0, accept 751, commit 751
+I [/root/cse532/mako/src/deptran/scheduler.cc:259] 2025-12-26 19:35:00.772 | loc_id=0 witness size distribution 50pct -1.00 90pct -1.00 99pct -1.00 ave -1.00
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:35:00.822 | Ending worker with n_tot 909 and n_current 909
+I [/root/cse532/mako/src/deptran/paxos_worker.cc:649] 2025-12-26 19:35:00.861 | Ending worker with n_tot 751 and n_current 751
+I [/root/cse532/mako/src/deptran/paxos_main_helper.cc:332] 2025-12-26 19:35:00.898 | exit process.
+END of advancer
+
+Cleaning up...
+Done!

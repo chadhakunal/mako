@@ -165,7 +165,10 @@ abstract service Raft {
 
 }
 
+// Luigi service moved to src/deptran/luigi/luigi.rpc
+
 abstract service Copilot {
+
   defer Forward(MarshallDeputy cmd);
 
   defer Prepare(uint8_t is_pilot,

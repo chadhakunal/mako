@@ -1,0 +1,27 @@
+=== 1-Shard 1-Replica TPC-C Benchmark ===
+Config: src/deptran/luigi/test/configs/1shard-1replica.yml
+Duration: 30s
+Threads: 8
+OWD: 100ms
+Headroom: 20ms
+Network: 80ms ± 10ms
+Starting replica (s101:31850)...
+Applying network latency: 80ms ± 10ms (pareto)...
+Running TPCC benchmark...
+=== Luigi Coordinator ===
+Shards: 1, Threads: 8, Duration: 30s, Benchmark: tpcc
+I [/root/cse532/mako/src/deptran/luigi/coordinator.cc:243] 2025-12-26 01:23:00.912 | Waiting for completion: dispatched=170911, completed=169304
+I [/root/cse532/mako/src/deptran/luigi/coordinator.cc:257] 2025-12-26 01:23:01.228 | Benchmark complete: dispatched=170911, completed=170911
+========== Benchmark Results ==========
+Duration:          30317 ms
+Total Txns:        170911
+Committed:         170911
+Aborted:           0 (0.00%)
+Throughput:        5637.46 txns/sec
+Avg Latency:       282845.52 us
+P50 Latency:       278900.00 us
+P99 Latency:       470435.00 us
+P99.9 Latency:     868382.00 us
+========================================
+Cleaning up...
+Done!

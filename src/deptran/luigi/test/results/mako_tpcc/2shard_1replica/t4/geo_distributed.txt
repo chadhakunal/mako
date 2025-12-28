@@ -1,0 +1,805 @@
+=== Mako TPC-C: 2-Shard 1-Replica ===
+Duration: 30s
+Threads: 4
+Network: 150ms ± 20ms
+
+Applying network latency: 150ms ± 20ms (pareto)...
+qdisc netem 8076: root refcnt 2 limit 1000 delay 150ms  20ms
+
+Starting shard 0...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  2
+  Shard index:       0
+  Number of threads: 4
+  Cluster:           localhost
+  Micro benchmark:   disabled
+  Replicated mode:   disabled
+=========================================
+20251126-18:15.01-959266(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f096977f000, 0x7f09a997f000)
+  runtime0 cpu0 owns [0x7f0969800000, 0x7f0979800000)
+  runtime0 cpu1 owns [0x7f0979800000, 0x7f0989800000)
+  runtime0 cpu2 owns [0x7f0989800000, 0x7f0999800000)
+  runtime0 cpu3 owns [0x7f0999800000, 0x7f09a9800000)
+Database Benchmark:
+  pid: 76279
+settings:
+  num-cpus    : 8
+  num-threads : 4
+  shardIndex  : 0
+  paxos_proc_name  : localhost
+  nshards     : 2
+  is_micro    : 0
+  is_replicated : 0
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+tpcc settings:
+  cross_partition_transactions : 1
+  read_only_snapshots          : 1
+  partition_locks              : 0
+  separate_tree_per_partition  : 1
+  new_order_remote_item_pct    : 1
+  new_order_fast_id_gen        : 1
+  uniform_item_dist            : 0
+  order_status_scan_hack       : 0
+  workload_mix                 : [45, 43, 4, 4, 4]
+new table is createded with name: customer_0, table-id: 1, on shard-server id:0
+new table is createded with name: customer_1, table-id: 2, on shard-server id:0
+new table is createded with name: customer_2, table-id: 3, on shard-server id:0
+new table is createded with name: customer_3, table-id: 4, on shard-server id:0
+new table is createded with name: customer_name_idx_0, table-id: 5, on shard-server id:0
+new table is createded with name: customer_name_idx_1, table-id: 6, on shard-server id:0
+new table is createded with name: customer_name_idx_2, table-id: 7, on shard-server id:0
+new table is createded with name: customer_name_idx_3, table-id: 8, on shard-server id:0
+new table is createded with name: district_0, table-id: 9, on shard-server id:0
+new table is createded with name: district_1, table-id: 10, on shard-server id:0
+new table is createded with name: district_2, table-id: 11, on shard-server id:0
+new table is createded with name: district_3, table-id: 12, on shard-server id:0
+new table is createded with name: history_0, table-id: 13, on shard-server id:0
+new table is createded with name: history_1, table-id: 14, on shard-server id:0
+new table is createded with name: history_2, table-id: 15, on shard-server id:0
+new table is createded with name: history_3, table-id: 16, on shard-server id:0
+new table is createded with name: new_order_0, table-id: 17, on shard-server id:0
+new table is createded with name: new_order_1, table-id: 18, on shard-server id:0
+new table is createded with name: new_order_2, table-id: 19, on shard-server id:0
+new table is createded with name: new_order_3, table-id: 20, on shard-server id:0
+new table is createded with name: oorder_0, table-id: 21, on shard-server id:0
+new table is createded with name: oorder_1, table-id: 22, on shard-server id:0
+new table is createded with name: oorder_2, table-id: 23, on shard-server id:0
+new table is createded with name: oorder_3, table-id: 24, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_0, table-id: 25, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_1, table-id: 26, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_2, table-id: 27, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_3, table-id: 28, on shard-server id:0
+new table is createded with name: order_line_0, table-id: 29, on shard-server id:0
+new table is createded with name: order_line_1, table-id: 30, on shard-server id:0
+new table is createded with name: order_line_2, table-id: 31, on shard-server id:0
+new table is createded with name: order_line_3, table-id: 32, on shard-server id:0
+new table is createded with name: stock_0, table-id: 33, on shard-server id:0
+new table is createded with name: stock_1, table-id: 34, on shard-server id:0
+new table is createded with name: stock_2, table-id: 35, on shard-server id:0
+new table is createded with name: stock_3, table-id: 36, on shard-server id:0
+new table is createded with name: stock_data_0, table-id: 37, on shard-server id:0
+new table is createded with name: stock_data_1, table-id: 38, on shard-server id:0
+new table is createded with name: stock_data_2, table-id: 39, on shard-server id:0
+new table is createded with name: stock_data_3, table-id: 40, on shard-server id:0
+new table is createded with name: warehouse_0, table-id: 41, on shard-server id:0
+new table is createded with name: warehouse_1, table-id: 42, on shard-server id:0
+new table is createded with name: warehouse_2, table-id: 43, on shard-server id:0
+new table is createded with name: warehouse_3, table-id: 44, on shard-server id:0
+new table is createded with name: item, table-id: 45, on shard-server id:0
+new table is createded with name: customer_remote_5, table-id: 201, on shard-server id:1
+new table is createded with name: customer_remote_6, table-id: 202, on shard-server id:1
+new table is createded with name: customer_remote_7, table-id: 203, on shard-server id:1
+new table is createded with name: customer_remote_8, table-id: 204, on shard-server id:1
+new table is createded with name: customer_name_idx_remote_5, table-id: 205, on shard-server id:1
+new table is createded with name: customer_name_idx_remote_6, table-id: 206, on shard-server id:1
+new table is createded with name: customer_name_idx_remote_7, table-id: 207, on shard-server id:1
+new table is createded with name: customer_name_idx_remote_8, table-id: 208, on shard-server id:1
+new table is createded with name: district_remote_5, table-id: 209, on shard-server id:1
+new table is createded with name: district_remote_6, table-id: 210, on shard-server id:1
+new table is createded with name: district_remote_7, table-id: 211, on shard-server id:1
+new table is createded with name: district_remote_8, table-id: 212, on shard-server id:1
+new table is createded with name: history_remote_5, table-id: 213, on shard-server id:1
+new table is createded with name: history_remote_6, table-id: 214, on shard-server id:1
+new table is createded with name: history_remote_7, table-id: 215, on shard-server id:1
+new table is createded with name: history_remote_8, table-id: 216, on shard-server id:1
+new table is createded with name: new_order_remote_5, table-id: 217, on shard-server id:1
+new table is createded with name: new_order_remote_6, table-id: 218, on shard-server id:1
+new table is createded with name: new_order_remote_7, table-id: 219, on shard-server id:1
+new table is createded with name: new_order_remote_8, table-id: 220, on shard-server id:1
+new table is createded with name: oorder_remote_5, table-id: 221, on shard-server id:1
+new table is createded with name: oorder_remote_6, table-id: 222, on shard-server id:1
+new table is createded with name: oorder_remote_7, table-id: 223, on shard-server id:1
+new table is createded with name: oorder_remote_8, table-id: 224, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_remote_5, table-id: 225, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_remote_6, table-id: 226, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_remote_7, table-id: 227, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_remote_8, table-id: 228, on shard-server id:1
+new table is createded with name: order_line_remote_5, table-id: 229, on shard-server id:1
+new table is createded with name: order_line_remote_6, table-id: 230, on shard-server id:1
+new table is createded with name: order_line_remote_7, table-id: 231, on shard-server id:1
+new table is createded with name: order_line_remote_8, table-id: 232, on shard-server id:1
+new table is createded with name: stock_remote_5, table-id: 233, on shard-server id:1
+new table is createded with name: stock_remote_6, table-id: 234, on shard-server id:1
+new table is createded with name: stock_remote_7, table-id: 235, on shard-server id:1
+new table is createded with name: stock_remote_8, table-id: 236, on shard-server id:1
+new table is createded with name: stock_data_remote_5, table-id: 237, on shard-server id:1
+new table is createded with name: stock_data_remote_6, table-id: 238, on shard-server id:1
+new table is createded with name: stock_data_remote_7, table-id: 239, on shard-server id:1
+new table is createded with name: stock_data_remote_8, table-id: 240, on shard-server id:1
+new table is createded with name: warehouse_remote_5, table-id: 241, on shard-server id:1
+new table is createded with name: warehouse_remote_6, table-id: 242, on shard-server id:1
+new table is createded with name: warehouse_remote_7, table-id: 243, on shard-server id:1
+new table is createded with name: warehouse_remote_8, table-id: 244, on shard-server id:1
+new table is createded with name: item_remote_5, table-id: 245, on shard-server id:1
+new table is createded with name: item_remote_6, table-id: 246, on shard-server id:1
+new table is createded with name: item_remote_7, table-id: 247, on shard-server id:1
+new table is createded with name: item_remote_8, table-id: 248, on shard-server id:1
+20251126-18:15.01-962642(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-962728(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+[TRANSPORT] Using default: rrr
+20251126-18:15.01-963045(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.01-963103(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.01-963200(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31009 (listening on 0.0.0.0:31009)
+20251126-18:15.01-963252(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31009
+20251126-18:15.01-963304(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31010 (listening on 0.0.0.0:31010)
+20251126-18:15.01-963351(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31010
+20251126-18:15.01-963406(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-18:15.01-963457(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-18:15.01-963535(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=0, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.01-963690(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=1, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.01-963917(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=2, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.01-964132(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=3, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.01-964453(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-964529(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-964661(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-964858(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-965044(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-965130(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-965192(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-965306(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.01-968347(us) 76279 ! run             (bench.cc:398):     # of loaders size:6
+20251126-18:15.01-969683(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=4, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.01-969788(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=5, shard_index=0, getShardIndex=0, loader=1
+start worker:5158
+[INFO] finished loading warehouse
+[INFO]   * average warehouse record length: 97 bytes
+20251126-18:15.01-970033(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=6, shard_index=0, getShardIndex=0, loader=1
+PinToWarehouseId(): coreid=2 pinned to whse=1 (partid=0)
+20251126-18:15.01-970195(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=7, shard_index=0, getShardIndex=0, loader=1
+PinToWarehouseId(): coreid=3 pinned to whse=1 (partid=0)
+PinToWarehouseId(): coreid=3 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=3 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=3 pinned to whse=4 (partid=3)
+[INFO] finished loading district
+[INFO]   * average district record length: 99 bytes
+[INFO] finished loading item
+[INFO]   * average item record length: 84.1739 bytes
+PinToWarehouseId(): coreid=2 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=2 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=2 pinned to whse=4 (partid=3)
+Starting shard 1...
+Running benchmark for 30 seconds...
+=========================================
+Configuration:
+=========================================
+  Number of shards:  2
+  Shard index:       1
+  Number of threads: 4
+  Cluster:           localhost
+  Micro benchmark:   disabled
+  Replicated mode:   disabled
+=========================================
+20251126-18:15.04-965861(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+SiloRuntime[0]::InitializeAllocator()
+  hugepgsize: 2097152
+  mmap() region [0x7f66b897f000, 0x7f66f8b7f000)
+  runtime0 cpu0 owns [0x7f66b8a00000, 0x7f66c8a00000)
+  runtime0 cpu1 owns [0x7f66c8a00000, 0x7f66d8a00000)
+  runtime0 cpu2 owns [0x7f66d8a00000, 0x7f66e8a00000)
+  runtime0 cpu3 owns [0x7f66e8a00000, 0x7f66f8a00000)
+Database Benchmark:
+  pid: 76335
+settings:
+  num-cpus    : 8
+  num-threads : 4
+  shardIndex  : 1
+  paxos_proc_name  : localhost
+  nshards     : 2
+  is_micro    : 0
+  is_replicated : 0
+  var-encode  : yes
+  allocator   : jemalloc
+system properties:
+  tuple_prefetch          : no
+  btree_node_prefetch     : yes
+tpcc settings:
+  cross_partition_transactions : 1
+  read_only_snapshots          : 1
+  partition_locks              : 0
+  separate_tree_per_partition  : 1
+  new_order_remote_item_pct    : 1
+  new_order_fast_id_gen        : 1
+  uniform_item_dist            : 0
+  order_status_scan_hack       : 0
+  workload_mix                 : [45, 43, 4, 4, 4]
+new table is createded with name: customer_0, table-id: 201, on shard-server id:1
+new table is createded with name: customer_1, table-id: 202, on shard-server id:1
+new table is createded with name: customer_2, table-id: 203, on shard-server id:1
+new table is createded with name: customer_3, table-id: 204, on shard-server id:1
+new table is createded with name: customer_name_idx_0, table-id: 205, on shard-server id:1
+new table is createded with name: customer_name_idx_1, table-id: 206, on shard-server id:1
+new table is createded with name: customer_name_idx_2, table-id: 207, on shard-server id:1
+new table is createded with name: customer_name_idx_3, table-id: 208, on shard-server id:1
+new table is createded with name: district_0, table-id: 209, on shard-server id:1
+new table is createded with name: district_1, table-id: 210, on shard-server id:1
+new table is createded with name: district_2, table-id: 211, on shard-server id:1
+new table is createded with name: district_3, table-id: 212, on shard-server id:1
+new table is createded with name: history_0, table-id: 213, on shard-server id:1
+new table is createded with name: history_1, table-id: 214, on shard-server id:1
+new table is createded with name: history_2, table-id: 215, on shard-server id:1
+new table is createded with name: history_3, table-id: 216, on shard-server id:1
+new table is createded with name: new_order_0, table-id: 217, on shard-server id:1
+new table is createded with name: new_order_1, table-id: 218, on shard-server id:1
+new table is createded with name: new_order_2, table-id: 219, on shard-server id:1
+new table is createded with name: new_order_3, table-id: 220, on shard-server id:1
+new table is createded with name: oorder_0, table-id: 221, on shard-server id:1
+new table is createded with name: oorder_1, table-id: 222, on shard-server id:1
+new table is createded with name: oorder_2, table-id: 223, on shard-server id:1
+new table is createded with name: oorder_3, table-id: 224, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_0, table-id: 225, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_1, table-id: 226, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_2, table-id: 227, on shard-server id:1
+new table is createded with name: oorder_c_id_idx_3, table-id: 228, on shard-server id:1
+new table is createded with name: order_line_0, table-id: 229, on shard-server id:1
+new table is createded with name: order_line_1, table-id: 230, on shard-server id:1
+new table is createded with name: order_line_2, table-id: 231, on shard-server id:1
+new table is createded with name: order_line_3, table-id: 232, on shard-server id:1
+new table is createded with name: stock_0, table-id: 233, on shard-server id:1
+new table is createded with name: stock_1, table-id: 234, on shard-server id:1
+new table is createded with name: stock_2, table-id: 235, on shard-server id:1
+new table is createded with name: stock_3, table-id: 236, on shard-server id:1
+new table is createded with name: stock_data_0, table-id: 237, on shard-server id:1
+new table is createded with name: stock_data_1, table-id: 238, on shard-server id:1
+new table is createded with name: stock_data_2, table-id: 239, on shard-server id:1
+new table is createded with name: stock_data_3, table-id: 240, on shard-server id:1
+new table is createded with name: warehouse_0, table-id: 241, on shard-server id:1
+new table is createded with name: warehouse_1, table-id: 242, on shard-server id:1
+new table is createded with name: warehouse_2, table-id: 243, on shard-server id:1
+new table is createded with name: warehouse_3, table-id: 244, on shard-server id:1
+new table is createded with name: item, table-id: 245, on shard-server id:1
+new table is createded with name: customer_remote_1, table-id: 1, on shard-server id:0
+new table is createded with name: customer_remote_2, table-id: 2, on shard-server id:0
+new table is createded with name: customer_remote_3, table-id: 3, on shard-server id:0
+new table is createded with name: customer_remote_4, table-id: 4, on shard-server id:0
+new table is createded with name: customer_name_idx_remote_1, table-id: 5, on shard-server id:0
+new table is createded with name: customer_name_idx_remote_2, table-id: 6, on shard-server id:0
+new table is createded with name: customer_name_idx_remote_3, table-id: 7, on shard-server id:0
+new table is createded with name: customer_name_idx_remote_4, table-id: 8, on shard-server id:0
+new table is createded with name: district_remote_1, table-id: 9, on shard-server id:0
+new table is createded with name: district_remote_2, table-id: 10, on shard-server id:0
+new table is createded with name: district_remote_3, table-id: 11, on shard-server id:0
+new table is createded with name: district_remote_4, table-id: 12, on shard-server id:0
+new table is createded with name: history_remote_1, table-id: 13, on shard-server id:0
+new table is createded with name: history_remote_2, table-id: 14, on shard-server id:0
+new table is createded with name: history_remote_3, table-id: 15, on shard-server id:0
+new table is createded with name: history_remote_4, table-id: 16, on shard-server id:0
+new table is createded with name: new_order_remote_1, table-id: 17, on shard-server id:0
+new table is createded with name: new_order_remote_2, table-id: 18, on shard-server id:0
+new table is createded with name: new_order_remote_3, table-id: 19, on shard-server id:0
+new table is createded with name: new_order_remote_4, table-id: 20, on shard-server id:0
+new table is createded with name: oorder_remote_1, table-id: 21, on shard-server id:0
+new table is createded with name: oorder_remote_2, table-id: 22, on shard-server id:0
+new table is createded with name: oorder_remote_3, table-id: 23, on shard-server id:0
+new table is createded with name: oorder_remote_4, table-id: 24, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_remote_1, table-id: 25, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_remote_2, table-id: 26, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_remote_3, table-id: 27, on shard-server id:0
+new table is createded with name: oorder_c_id_idx_remote_4, table-id: 28, on shard-server id:0
+new table is createded with name: order_line_remote_1, table-id: 29, on shard-server id:0
+new table is createded with name: order_line_remote_2, table-id: 30, on shard-server id:0
+new table is createded with name: order_line_remote_3, table-id: 31, on shard-server id:0
+new table is createded with name: order_line_remote_4, table-id: 32, on shard-server id:0
+new table is createded with name: stock_remote_1, table-id: 33, on shard-server id:0
+new table is createded with name: stock_remote_2, table-id: 34, on shard-server id:0
+new table is createded with name: stock_remote_3, table-id: 35, on shard-server id:0
+new table is createded with name: stock_remote_4, table-id: 36, on shard-server id:0
+new table is createded with name: stock_data_remote_1, table-id: 37, on shard-server id:0
+new table is createded with name: stock_data_remote_2, table-id: 38, on shard-server id:0
+new table is createded with name: stock_data_remote_3, table-id: 39, on shard-server id:0
+new table is createded with name: stock_data_remote_4, table-id: 40, on shard-server id:0
+new table is createded with name: warehouse_remote_1, table-id: 41, on shard-server id:0
+new table is createded with name: warehouse_remote_2, table-id: 42, on shard-server id:0
+new table is createded with name: warehouse_remote_3, table-id: 43, on shard-server id:0
+new table is createded with name: warehouse_remote_4, table-id: 44, on shard-server id:0
+new table is createded with name: item_remote_1, table-id: 45, on shard-server id:0
+new table is createded with name: item_remote_2, table-id: 46, on shard-server id:0
+new table is createded with name: item_remote_3, table-id: 47, on shard-server id:0
+new table is createded with name: item_remote_4, table-id: 48, on shard-server id:0
+20251126-18:15.04-968646(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-968731(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+[TRANSPORT] Using default: rrr
+20251126-18:15.04-969084(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.04-969167(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.04-969231(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31109 (listening on 0.0.0.0:31109)
+20251126-18:15.04-969286(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31109
+20251126-18:15.04-969336(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31110 (listening on 0.0.0.0:31110)
+20251126-18:15.04-969393(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31110
+20251126-18:15.04-969463(us) 76335 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-18:15.04-969531(us) 76335 * RunEventLoop    (rrr_rpc_backend.cc:518): RrrRpcBackend::RunEventLoop: Starting event loop
+20251126-18:15.04-970166(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=0, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-970390(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=1, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-971989(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=2, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-973147(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=3, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-973491(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-973590(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-973785(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-973972(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-974064(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-974167(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-974234(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-974454(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.04-977486(us) 76335 ! run             (bench.cc:398):     # of loaders size:6
+20251126-18:15.04-979051(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=4, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-979158(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=5, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-979305(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=6, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.04-979383(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=7, shard_index=1, getShardIndex=1, loader=1
+start worker:8078
+[INFO] finished loading warehousePinToWarehouseId(): coreid=3 pinned to whse=1 (partid=0)
+
+[INFO]   * average warehouse record length: PinToWarehouseId(): coreid=2 pinned to whse=1 (partid=0)
+97 bytesPinToWarehouseId(): coreid=3 pinned to whse=2 (partid=1)
+
+PinToWarehouseId(): coreid=3 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=3 pinned to whse=4 (partid=3)
+[INFO] finished loading district
+[INFO]   * average district record length: 99 bytes
+[INFO] finished loading item
+[INFO]   * average item record length: 84.1739 bytes
+[INFO] finished loading stock
+[INFO]   * average stock record length: 8 bytes
+20251126-18:15.05-666460(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=8, shard_index=0, getShardIndex=0, loader=1
+20251126-18:15.05-666568(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=9, shard_index=0, getShardIndex=0, loader=1
+num batches: 30
+PinToWarehouseId(): coreid=4 pinned to whse=1 (partid=0)
+PinToWarehouseId(): coreid=5 pinned to whse=1 (partid=0)
+PinToWarehouseId(): coreid=5 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=5 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=4 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=2 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=5 pinned to whse=4 (partid=3)
+[INFO] finished loading order
+[INFO]   * average order_line record length: 11.2189 bytes
+[INFO]   * average oorder record length: 7.8414 bytes
+[INFO]   * average new_order record length: 12 bytes
+PinToWarehouseId(): coreid=4 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=4 pinned to whse=4 (partid=3)
+PinToWarehouseId(): coreid=2 pinned to whse=3 (partid=2)
+[INFO] finished loading customer
+[INFO]   * average customer record length: 153.931 bytes 
+timed region dataloading took 5323.59 ms
+DB size: 601.316 MB
+[0, 0, 0] txns persisted in loading phase
+20251126-18:15.07-292127(us) 76279 ! run             (bench.cc:451):     # of nthreads:4
+starting benchmark...
+--------------Finish loading data and wait for others completing load phase ------------
+tpcc: worker id 8 => warehouses [1, 2)
+tpcc: worker id 9 => warehouses [2, 3)
+tpcc: worker id 10 => warehouses [3, 4)
+tpcc: worker id 11 => warehouses [4, 5)
+No JEMALLOC_NO_RENAME
+20251126-18:15.07-295214(us) 76279 No JEMALLOC_NO_RENAME
+* thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=10, shard_index=0, getShardIndex=0, loader=0
+No JEMALLOC_NO_RENAME
+20251126-18:15.07-295326(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=12, shard_index=0, getShardIndex=0, loader=0
+20251126-18:15.07-295527(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=11, shard_index=0, getShardIndex=0, loader=0
+20251126-18:15.07-295855(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-296292(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-296373(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.07-296622(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.07-296704(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31001 (listening on 0.0.0.0:31001)
+20251126-18:15.07-296752(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31001
+20251126-18:15.07-296802(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-296892(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.07-297062(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.07-297125(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-297205(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31002 (listening on 0.0.0.0:31002)
+20251126-18:15.07-297257(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31002
+20251126-18:15.07-297354(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.07-297582(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.07-297649(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-297725(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31000 (listening on 0.0.0.0:31000)
+20251126-18:15.07-297771(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31000
+20251126-18:15.07-298189(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+No JEMALLOC_NO_RENAME
+20251126-18:15.07-322618(us) 76279 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=13, shard_index=0, getShardIndex=0, loader=0
+20251126-18:15.07-323407(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-323932(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.07-324237(us) 76279 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.07-324351(us) 76279 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31003 (listening on 0.0.0.0:31003)
+20251126-18:15.07-324387(us) 76279 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31003
+20251126-18:15.07-324850(us) 76279 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.07-325215(us) 76279 ! run             (bench.cc:511):     start the running time, runTime:30
+20251126-18:15.07-325265(us) 76279 ! run             (bench.cc:523):     runtime time left:30000 ms, bool:1
+20251126-18:15.07-330023(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=204, table_name=customer_remote_8, is_remote=1
+20251126-18:15.07-330654(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=234, table_name=stock_remote_6, is_remote=1
+20251126-18:15.07-953305(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=234, table_name=stock_remote_6, is_remote=1
+PinToWarehouseId(): coreid=2 pinned to whse=4 (partid=3)
+20251126-18:15.08-187981(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=202, table_name=customer_remote_6, is_remote=1
+20251126-18:15.08-332868(us) 76279 ! run             (bench.cc:523):     runtime time left:29000 ms, bool:1
+20251126-18:15.08-480934(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=233, table_name=stock_remote_5, is_remote=1
+20251126-18:15.08-533550(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=201, table_name=customer_remote_5, is_remote=1
+20251126-18:15.08-813967(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=204, table_name=customer_remote_8, is_remote=1
+[INFO] finished loading stock
+[INFO]   * average stock record length: 8 bytes
+20251126-18:15.08-988894(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=8, shard_index=1, getShardIndex=1, loader=1
+20251126-18:15.08-988979(us) 76335 num batches: 30
+PinToWarehouseId(): coreid=4 pinned to whse=* thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=9, shard_index=1, getShardIndex=1, loader=1
+1 (partid=0)
+PinToWarehouseId(): coreid=5 pinned to whse=1 (partid=0)
+20251126-18:15.09-64073(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=233, table_name=stock_remote_5, is_remote=1
+PinToWarehouseId(): coreid=5 pinned to whse=2 (partid=1)
+PinToWarehouseId(): coreid=5 pinned to whse=3 (partid=2)
+20251126-18:15.09-339146(us) 76279 ! run             (bench.cc:523):     runtime time left:28000 ms, bool:1
+PinToWarehouseId(): coreid=4 pinned to whse=2 (partid=1)
+20251126-18:15.09-381355(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=234, table_name=stock_remote_6, is_remote=1
+PinToWarehouseId(): coreid=5 pinned to whse=4 (partid=3)
+20251126-18:15.09-497294(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=233, table_name=stock_remote_5, is_remote=1
+[INFO] finished loading order
+[INFO]   * average order_line record length: 11.2189 bytes
+[INFO]   * average oorder record length: 7.8414 bytes
+[INFO]   * average new_order record length: 12 bytes
+PinToWarehouseId(): coreid=4 pinned to whse=3 (partid=2)
+PinToWarehouseId(): coreid=4 pinned to whse=4 (partid=3)
+20251126-18:15.10-345706(us) 76279 ! run             (bench.cc:523):     runtime time left:27000 ms, bool:1
+[INFO] finished loading customer
+[INFO]   * average customer record length: 153.931 bytes 
+timed region dataloading took 5454.96 ms
+DB size: 768.715 MB
+[0, 0, 0] txns persisted in loading phase
+20251126-18:15.10-432619(us) 76335 ! run             (bench.cc:451):     # of nthreads:4
+starting benchmark...
+--------------Finish loading data and wait for others completing load phase ------------
+tpcc: worker id 8 => warehouses [1, 2)
+tpcc: worker id 9 => warehouses [2, 3)
+tpcc: worker id 10 => warehouses [3, 4)
+tpcc: worker id 11 => warehouses [4, 5)
+No JEMALLOC_NO_RENAME
+No JEMALLOC_NO_RENAME
+20251126-18:15.10-435221(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=10, shard_index=1, getShardIndex=1, loader=0
+20251126-18:15.10-435330(us) 76335 No JEMALLOC_NO_RENAME
+* thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=11, shard_index=1, getShardIndex=1, loader=0
+20251126-18:15.10-435446(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=12, shard_index=1, getShardIndex=1, loader=0
+20251126-18:15.10-435797(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-435862(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-436163(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-436271(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-436322(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+[TRANSPORT] Using default: rrr
+20251126-18:15.10-436504(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.10-436574(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.10-436627(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31101 (listening on 0.0.0.0:31101)
+20251126-18:15.10-436670(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31101
+20251126-18:15.10-436713(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31100 (listening on 0.0.0.0:31100)
+20251126-18:15.10-436760(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31100
+20251126-18:15.10-436821(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.10-436990(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-437062(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.10-437135(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-437210(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31102 (listening on 0.0.0.0:31102)
+20251126-18:15.10-437252(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31102
+20251126-18:15.10-437629(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+No JEMALLOC_NO_RENAME
+20251126-18:15.10-454610(us) 76335 * thread_init     (mbta_wrapper.hh:1047): thread_init: thread_id=13, shard_index=1, getShardIndex=1, loader=0
+20251126-18:15.10-455200(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-455610(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+[TRANSPORT] Using default: rrr
+20251126-18:15.10-455819(us) 76335 * Initialize      (rrr_rpc_backend.cc:58): RrrRpcBackend::Initialize: poll_thread_worker_ created, is_some=1
+20251126-18:15.10-455884(us) 76335 * Initialize      (rrr_rpc_backend.cc:88): RrrRpcBackend initialized on 127.0.0.1:31103 (listening on 0.0.0.0:31103)
+20251126-18:15.10-455918(us) 76335 * FastTransport   (fasttransport.cc:116): FastTransport initialized with rrr/rpc backend on 127.0.0.1:31103
+20251126-18:15.10-456248(us) 76335 * ParseOldFormat  (configuration.cc:66): Using old configuration format
+20251126-18:15.10-456560(us) 76335 ! run             (bench.cc:511):     start the running time, runTime:30
+20251126-18:15.10-456612(us) 76335 ! run             (bench.cc:523):     runtime time left:30000 ms, bool:1
+20251126-18:15.10-458822(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=4, table_name=customer_remote_4, is_remote=1
+20251126-18:15.10-460260(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=36, table_name=stock_remote_4, is_remote=1
+20251126-18:15.10-461428(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=33, table_name=stock_remote_1, is_remote=1
+20251126-18:15.10-644732(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=234, table_name=stock_remote_6, is_remote=1
+20251126-18:15.10-871438(us) 76279 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=233, table_name=stock_remote_5, is_remote=1
+20251126-18:15.11-84491(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=1, table_name=customer_remote_1, is_remote=1
+20251126-18:15.11-352163(us) 76279 ! run             (bench.cc:523):     runtime time left:26000 ms, bool:1
+20251126-18:15.11-462901(us) 76335 ! run             (bench.cc:523):     runtime time left:29000 ms, bool:1
+20251126-18:15.12-249131(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=4, table_name=customer_remote_4, is_remote=1
+20251126-18:15.12-358736(us) 76279 ! run             (bench.cc:523):     runtime time left:25000 ms, bool:1
+20251126-18:15.12-469424(us) 76335 ! run             (bench.cc:523):     runtime time left:28000 ms, bool:1
+20251126-18:15.12-576818(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=2, table_name=customer_remote_2, is_remote=1
+20251126-18:15.12-641468(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=4, table_name=customer_remote_4, is_remote=1
+20251126-18:15.12-691927(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=4, table_name=customer_remote_4, is_remote=1
+20251126-18:15.13-365328(us) 76279 ! run             (bench.cc:523):     runtime time left:24000 ms, bool:1
+20251126-18:15.13-475513(us) 76335 ! run             (bench.cc:523):     runtime time left:27000 ms, bool:1
+20251126-18:15.13-728296(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=2, table_name=customer_remote_2, is_remote=1
+20251126-18:15.14-105938(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=36, table_name=stock_remote_4, is_remote=1
+20251126-18:15.14-185206(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=33, table_name=stock_remote_1, is_remote=1
+20251126-18:15.14-371653(us) 76279 ! run             (bench.cc:523):     runtime time left:23000 ms, bool:1
+20251126-18:15.14-430930(us) 76335 ! get             (mbta_wrapper.hh:99): DEBUG get(): table_id=2, table_name=customer_remote_2, is_remote=1
+20251126-18:15.14-481902(us) 76335 ! run             (bench.cc:523):     runtime time left:26000 ms, bool:1
+20251126-18:15.15-378100(us) 76279 ! run             (bench.cc:523):     runtime time left:22000 ms, bool:1
+20251126-18:15.15-488420(us) 76335 ! run             (bench.cc:523):     runtime time left:25000 ms, bool:1
+20251126-18:15.16-384472(us) 76279 ! run             (bench.cc:523):     runtime time left:21000 ms, bool:1
+20251126-18:15.16-495278(us) 76335 ! run             (bench.cc:523):     runtime time left:24000 ms, bool:1
+20251126-18:15.17-391134(us) 76279 ! run             (bench.cc:523):     runtime time left:20000 ms, bool:1
+20251126-18:15.17-501684(us) 76335 ! run             (bench.cc:523):     runtime time left:23000 ms, bool:1
+20251126-18:15.18-397662(us) 76279 ! run             (bench.cc:523):     runtime time left:19000 ms, bool:1
+20251126-18:15.18-508269(us) 76335 ! run             (bench.cc:523):     runtime time left:22000 ms, bool:1
+20251126-18:15.19-404152(us) 76279 ! run             (bench.cc:523):     runtime time left:18000 ms, bool:1
+20251126-18:15.19-515168(us) 76335 ! run             (bench.cc:523):     runtime time left:21000 ms, bool:1
+20251126-18:15.20-411100(us) 76279 ! run             (bench.cc:523):     runtime time left:17000 ms, bool:1
+20251126-18:15.20-522074(us) 76335 ! run             (bench.cc:523):     runtime time left:20000 ms, bool:1
+20251126-18:15.21-417917(us) 76279 ! run             (bench.cc:523):     runtime time left:16000 ms, bool:1
+20251126-18:15.21-528684(us) 76335 ! run             (bench.cc:523):     runtime time left:19000 ms, bool:1
+20251126-18:15.22-424187(us) 76279 ! run             (bench.cc:523):     runtime time left:15000 ms, bool:1
+20251126-18:15.22-535091(us) 76335 ! run             (bench.cc:523):     runtime time left:18000 ms, bool:1
+20251126-18:15.23-430532(us) 76279 ! run             (bench.cc:523):     runtime time left:14000 ms, bool:1
+20251126-18:15.23-541556(us) 76335 ! run             (bench.cc:523):     runtime time left:17000 ms, bool:1
+20251126-18:15.24-436810(us) 76279 ! run             (bench.cc:523):     runtime time left:13000 ms, bool:1
+20251126-18:15.24-547650(us) 76335 ! run             (bench.cc:523):     runtime time left:16000 ms, bool:1
+20251126-18:15.25-443784(us) 76279 ! run             (bench.cc:523):     runtime time left:12000 ms, bool:1
+20251126-18:15.25-554334(us) 76335 ! run             (bench.cc:523):     runtime time left:15000 ms, bool:1
+20251126-18:15.26-450511(us) 76279 ! run             (bench.cc:523):     runtime time left:11000 ms, bool:1
+20251126-18:15.26-560549(us) 76335 ! run             (bench.cc:523):     runtime time left:14000 ms, bool:1
+20251126-18:15.27-457221(us) 76279 ! run             (bench.cc:523):     runtime time left:10000 ms, bool:1
+20251126-18:15.27-567118(us) 76335 ! run             (bench.cc:523):     runtime time left:13000 ms, bool:1
+20251126-18:15.28-463829(us) 76279 ! run             (bench.cc:523):     runtime time left:9000 ms, bool:1
+20251126-18:15.28-573571(us) 76335 ! run             (bench.cc:523):     runtime time left:12000 ms, bool:1
+20251126-18:15.29-470284(us) 76279 ! run             (bench.cc:523):     runtime time left:8000 ms, bool:1
+20251126-18:15.29-580640(us) 76335 ! run             (bench.cc:523):     runtime time left:11000 ms, bool:1
+20251126-18:15.30-476201(us) 76279 ! run             (bench.cc:523):     runtime time left:7000 ms, bool:1
+20251126-18:15.30-587045(us) 76335 ! run             (bench.cc:523):     runtime time left:10000 ms, bool:1
+20251126-18:15.31-482419(us) 76279 ! run             (bench.cc:523):     runtime time left:6000 ms, bool:1
+20251126-18:15.31-593427(us) 76335 ! run             (bench.cc:523):     runtime time left:9000 ms, bool:1
+20251126-18:15.32-489010(us) 76279 ! run             (bench.cc:523):     runtime time left:5000 ms, bool:1
+20251126-18:15.32-599752(us) 76335 ! run             (bench.cc:523):     runtime time left:8000 ms, bool:1
+20251126-18:15.33-495479(us) 76279 ! run             (bench.cc:523):     runtime time left:4000 ms, bool:1
+20251126-18:15.33-606249(us) 76335 ! run             (bench.cc:523):     runtime time left:7000 ms, bool:1
+20251126-18:15.34-501734(us) 76279 ! run             (bench.cc:523):     runtime time left:3000 ms, bool:1
+20251126-18:15.34-615868(us) 76335 ! run             (bench.cc:523):     runtime time left:6000 ms, bool:1
+20251126-18:15.35-518629(us) 76279 ! run             (bench.cc:523):     runtime time left:2000 ms, bool:1
+20251126-18:15.35-629336(us) 76335 ! run             (bench.cc:523):     runtime time left:5000 ms, bool:1
+20251126-18:15.36-525475(us) 76279 ! run             (bench.cc:523):     runtime time left:1000 ms, bool:1
+20251126-18:15.36-636198(us) 76335 ! run             (bench.cc:523):     runtime time left:4000 ms, bool:1
+20251126-18:15.37-532407(us) 76279 ! run             (bench.cc:533):     runtime_plus:0
+[SHUTDOWN] Setting running=false to stop database worker threads
+[SHUTDOWN] Calling first stop() to stop client transports
+20251126-18:15.37-532506(us) 76279 ! stop            (bench.cc:373):     stop all erpc clients. set stop=false
+20251126-18:15.37-532546(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.37-532594(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.37-532630(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.37-532665(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-18:15.37-532701(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-18:15.37-532919(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.37-532967(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.37-532995(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 1 client connections to close
+20251126-18:15.37-533063(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 1 client connections
+20251126-18:15.37-533104(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-18:15.37-533150(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+20251126-18:15.37-533185(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.37-533216(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.37-533247(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.37-533288(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-18:15.37-533331(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-18:15.37-533363(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.37-533394(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.37-533431(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 1 client connections to close
+20251126-18:15.37-533485(us) 76279 ! SendBatchToAll  (rrr_rpc_backend.cc:488): RrrRpcBackend::SendBatchToAll: stop requested after wait, aborting (req_type=10)
+20251126-18:15.37-533548(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 1 client connections
+20251126-18:15.37-533585(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-18:15.37-533626(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+20251126-18:15.37-533667(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.37-533705(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.37-533741(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.37-533772(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-18:15.37-533812(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-18:15.37-533850(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.37-533887(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.37-533925(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 1 client connections to close
+20251126-18:15.37-533967(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:406): RrrRpcBackend::SendToAll: stop requested after wait, aborting (req_type=4)
+jump out the while loop
+20251126-18:15.37-534227(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=8)
+20251126-18:15.37-534271(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=3)
+20251126-18:15.37-534312(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=4)
+jump out the while loop
+20251126-18:15.37-534365(us) 76279 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 5366 bytes, counter: 99, avg: 54.202020
+20251126-18:15.37-534445(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 1 client connections
+20251126-18:15.37-534501(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-18:15.37-534549(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+20251126-18:15.37-534605(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.37-534642(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.37-534677(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.37-534720(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 0 request queues to stop
+20251126-18:15.37-534759(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 0 response queues to stop
+20251126-18:15.37-534796(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.37-534833(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.37-534872(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 1 client connections to close
+20251126-18:15.37-534915(us) 76279 ! SendToShard     (rrr_rpc_backend.cc:301): RrrRpcBackend::SendToShard: stop requested after wait, aborting
+20251126-18:15.37-534969(us) 76279 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 4512 bytes, counter: 101, avg: 44.673267
+20251126-18:15.37-535031(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 1 client connections
+20251126-18:15.37-535078(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 0 bytes, counter: 0, avg: -nan
+20251126-18:15.37-535117(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[SHUTDOWN] First stop() completed
+[SHUTDOWN] Joining 420251126-18:15.37-535171(us) 76279 ! SendToShard     (rrr_rpc_backend.cc:301): RrrRpcBackend::SendToShard: stop requested after wait, aborting
+ worker threads
+[SHUTDOWN] Joining worker 0
+20251126-18:15.37-535268(us) 76279 ! SendBatchToAll  (rrr_rpc_backend.cc:440): RrrRpcBackend::SendBatchToAll: stop requested, not sending (req_type=10)
+20251126-18:15.37-535339(us) 76279 ! SendBatchToAll  (rrr_rpc_backend.cc:440): RrrRpcBackend::SendBatchToAll: stop requested, not sending (req_type=10)
+20251126-18:15.37-535394(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=8)
+20251126-18:15.37-535438(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=3)
+20251126-18:15.37-535477(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=4)
+jump out the while loop
+20251126-18:15.37-535519(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=8)
+20251126-18:15.37-535593(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=3)
+20251126-18:15.37-535635(us) 76279 ! SendToAll       (rrr_rpc_backend.cc:340): RrrRpcBackend::SendToAll: stop requested, not sending (req_type=4)
+jump out the while loop
+20251126-18:15.37-535677(us) 76279 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 5370 bytes, counter: 100, avg: 53.700000
+20251126-18:15.37-535726(us) 76279 * PrintStats      (rrr_rpc_backend.cc:689): RrrRpcBackend request stats: msg_size_req_sent: 4093 bytes, counter: 101, avg: 40.524752
+20251126-18:15.37-642974(us) 76335 ! run             (bench.cc:523):     runtime time left:3000 ms, bool:1
+[SHUTDOWN] Worker 0 joined
+[SHUTDOWN] Joining worker 1
+[SHUTDOWN] Worker 1 joined
+[SHUTDOWN] Joining worker 2
+[SHUTDOWN] Worker 2 joined
+[SHUTDOWN] Joining worker 3
+[SHUTDOWN] Worker 3 joined
+[SHUTDOWN] All workers joined
+[SHUTDOWN] Calling stop_erpc_server()
+[STOP_SERVER] Stopping 2 server transports
+[STOP_SERVER] Stopping server transport 0
+20251126-18:15.38-536190(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.38-536230(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.38-536322(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:583): RrrRpcBackend::RunEventLoop: Stop flag detected, exiting event loop
+20251126-18:15.38-536373(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:587): RrrRpcBackend::RunEventLoop: Exited cleanly
+20251126-18:15.38-536409(us) 76279 * erpc_server     (rpc_setup.cc:121): the erpc_server is terminated on shardIdx:0, alpha:0!
+20251126-18:15.38-546379(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.38-546439(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 2 request queues to stop
+20251126-18:15.38-546476(us) 76279 * Stop            (rrr_rpc_backend.cc:625): RrrRpcBackend::Stop: Stopping request queue for server_id 6
+20251126-18:15.38-546532(us) 76279 * Stop            (rrr_rpc_backend.cc:625): RrrRpcBackend::Stop: Stopping request queue for server_id 4
+20251126-18:15.38-546598(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 2 response queues to stop
+20251126-18:15.38-546640(us) 76279 * Stop            (rrr_rpc_backend.cc:633): RrrRpcBackend::Stop: Stopping response queue for server_id 6
+20251126-18:15.38-546692(us) 76279 * Stop            (rrr_rpc_backend.cc:633): RrrRpcBackend::Stop: Stopping response queue for server_id 4
+20251126-18:15.38-546738(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.38-546801(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.38-546862(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-18:15.38-546907(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-18:15.38-546943(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 6675 bytes, counter: 183, avg: 36.475410
+20251126-18:15.38-546982(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[STOP_SERVER] Server transport 0 stopped
+[STOP_SERVER] Stopping server transport 1
+20251126-18:15.38-547061(us) 76279 * Stop            (rrr_rpc_backend.cc:599): RrrRpcBackend::Stop: BEGIN - Setting stop flag
+20251126-18:15.38-547097(us) 76279 * Stop            (rrr_rpc_backend.cc:602): RrrRpcBackend::Stop: Waiting for event loop to exit...
+20251126-18:15.38-547188(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:583): RrrRpcBackend::RunEventLoop: Stop flag detected, exiting event loop
+20251126-18:15.38-547232(us) 76279 * RunEventLoop    (rrr_rpc_backend.cc:587): RrrRpcBackend::RunEventLoop: Exited cleanly
+20251126-18:15.38-547262(us) 76279 * erpc_server     (rpc_setup.cc:121): the erpc_server is terminated on shardIdx:0, alpha:1!
+20251126-18:15.38-557202(us) 76279 * Stop            (rrr_rpc_backend.cc:618): RrrRpcBackend::Stop: Event loop exited successfully
+20251126-18:15.38-557255(us) 76279 * Stop            (rrr_rpc_backend.cc:622): RrrRpcBackend::Stop: Signaling 2 request queues to stop
+20251126-18:15.38-557295(us) 76279 * Stop            (rrr_rpc_backend.cc:625): RrrRpcBackend::Stop: Stopping request queue for server_id 7
+20251126-18:15.38-557342(us) 76279 * Stop            (rrr_rpc_backend.cc:625): RrrRpcBackend::Stop: Stopping request queue for server_id 5
+20251126-18:15.38-557401(us) 76279 * Stop            (rrr_rpc_backend.cc:630): RrrRpcBackend::Stop: Signaling 2 response queues to stop
+20251126-18:15.38-557462(us) 76279 * Stop            (rrr_rpc_backend.cc:633): RrrRpcBackend::Stop: Stopping response queue for server_id 7
+20251126-18:15.38-557525(us) 76279 * Stop            (rrr_rpc_backend.cc:633): RrrRpcBackend::Stop: Stopping response queue for server_id 5
+20251126-18:15.38-557588(us) 76279 * Stop            (rrr_rpc_backend.cc:641): RrrRpcBackend::Stop: Server cleanup deferred to destructor
+20251126-18:15.38-557641(us) 76279 * Stop            (rrr_rpc_backend.cc:644): RrrRpcBackend::Stop: Closing client connections
+20251126-18:15.38-557693(us) 76279 * Stop            (rrr_rpc_backend.cc:648): RrrRpcBackend::Stop: Found 0 client connections to close
+20251126-18:15.38-557734(us) 76279 * Stop            (rrr_rpc_backend.cc:668): RrrRpcBackend::Stop: Closed 0 client connections
+20251126-18:15.38-557775(us) 76279 * Stop            (rrr_rpc_backend.cc:680): RrrRpcBackend stats: msg_size_resp_sent: 7643 bytes, counter: 184, avg: 41.538043
+20251126-18:15.38-557816(us) 76279 * Stop            (rrr_rpc_backend.cc:683): RrrRpcBackend::Stop: END
+[STOP_SERVER] Server transport 1 stopped
+[STOP_SERVER] All server transports stopped
+[SHUTDOWN] stop_erpc_server() completed
+[SHUTDOWN] Calling second stop()
+20251126-18:15.38-557924(us) 76279 ! stop            (bench.cc:373):     stop all erpc clients. set stop=false
+[SHUTDOWN] Second stop() completed
+[SHUTDOWN] Calling do_txn_finish()
+[SHUTDOWN] do_txn_finish() completed
+--- n_commits per partition ---
+ par_id: 0, n_commits: 268
+ par_id: 1, n_commits: 392
+ par_id: 2, n_commits: 414
+ par_id: 3, n_commits: 220
+--- benchmark statistics ---
+runtime: 30.2329 sec
+memory delta: 395.066 MB
+n_commits: 1294
+latency_numer_us: 59818
+latency_numer_us_remote: 113348346
+memory delta rate: 13.0674 MB/sec
+logical memory delta: 0.082881 MB
+logical memory delta rate: 0.00274141 MB/sec
+agg_nosync_throughput: 42.8012 ops/sec
+avg_nosync_per_core_throughput: 10.7003 ops/sec/core
+agg_throughput: 42.801 ops/sec
+avg_per_core_throughput: 10.7003 ops/sec/core
+agg_persist_throughput: 42.801 ops/sec
+avg_per_core_persist_throughput: 10.7003 ops/sec/core
+avg_latency: 0.0462272 ms
+avg_persist_latency: 0 ms
+agg_abort_rate: 0.429995 aborts/sec
+avg_per_core_abort_rate: 0.107499 aborts/sec/core
+  NewOrder_local_commit_latency: 0.0380099 ms
+  NewOrder_local_abort_latency: 0.03004 ms
+  NewOrder_local_abort_ratio: 0.0017762
+  Payment_local_commit_latency: 0.0461053 ms
+  Payment_local_abort_latency: -nan ms
+  Payment_local_abort_ratio: 0
+  Delivery_local_commit_latency: 0.10767 ms
+  Delivery_local_abort_latency: -nan ms
+  Delivery_local_abort_ratio: 0
+  OrderStatus_local_commit_latency: 0.0122133 ms
+  OrderStatus_local_abort_latency: -nan ms
+  OrderStatus_local_abort_ratio: 0
+  StockLevel_local_commit_latency: 0.205336 ms
+  StockLevel_local_abort_latency: -nan ms
+  StockLevel_local_abort_ratio: 0
+  NewOrder_remote_ratio: 6.47841 %
+  NewOrder_remote_abort_ratio: 5.12821 %
+  NewOrder_remote_commit_latency: 1435.9 ms
+  NewOrder_remote_abort_latency: 1746.71 ms
+  Payment_remote_ratio: 8.33333 %
+  Payment_remote_abort_ratio: 21.7391 %
+  Payment_remote_commit_latency: 1672.78 ms
+  Payment_remote_abort_latency: 393.65 ms
+--- system counters (for benchmark) ---
+--- perf counters (if enabled, for benchmark) ---
+--- allocator stats ---
+[SiloRuntime 0] ncpus=4
+[SiloRuntime 0] cpu=0 fully_faulted?=0 remaining=268435456 bytes
+[SiloRuntime 0] cpu=1 fully_faulted?=0 remaining=268435456 bytes
+[SiloRuntime 0] cpu=2 fully_faulted?=0 remaining=268435456 bytes
+[SiloRuntime 0] cpu=3 fully_faulted?=0 remaining=268435456 bytes
+---------------------------------------
+--- system counters for n_comits ---
+[STOP_SERVER] Stopping 2 server transports
+[STOP_SERVER] Stopping server transport 0
+20251126-18:15.38-559941(us) 76279 * Stop            (rrr_rpc_backend.cc:595): RrrRpcBackend::Stop: Already stopped, returning
+[STOP_SERVER] Server transport 0 stopped
+[STOP_SERVER] Stopping server transport 1
+20251126-18:15.38-560028(us) 76279 * Stop            (rrr_rpc_backend.cc:595): RrrRpcBackend::Stop: Already stopped, returning
+[STOP_SERVER] Server transport 1 stopped
+[STOP_SERVER] All server transports stopped
+20251126-18:15.38-652336(us) 76335 ! run             (bench.cc:523):     runtime time left:2000 ms, bool:1
+20251126-18:15.38-765600(us) 76335 ! SendToShard     (rrr_rpc_backend.cc:306): RPC error: 107
+20251126-18:15.38-769847(us) 76335 ! SendToAll       (rrr_rpc_backend.cc:411): RPC error: 107
+20251126-18:15.38-769903(us) 76335 ! SendToAll       (rrr_rpc_backend.cc:368): Failed to begin_request for shard 0
+20251126-18:15.38-770802(us) 76335 ! SendToAll       (rrr_rpc_backend.cc:411): RPC error: 107
+20251126-18:15.38-771678(us) 76335 ! SendToShard     (rrr_rpc_backend.cc:270): Failed to begin_request for req_type 1
+20251126-18:15.38-795412(us) 76335 ! SendBatchToAll  (rrr_rpc_backend.cc:493): RPC error: 107
+20251126-18:15.38-795472(us) 76335 ! SendToAll       (rrr_rpc_backend.cc:368): Failed to begin_request for shard 0
+20251126-18:15.39-658635(us) 76335 ! run             (bench.cc:523):     runtime time left:1000 ms, bool:1
+20251126-18:15.40-664757(us) 76335 ! run             (bench.cc:533):     runtime_plus:0
+[SHUTDOWN] Setting running=false to stop database worker threads
+[SHUTDOWN] Calling first stop() to stop client transports
+20251126-18:15.40-664855(us) 76335 ! stop            (bench.cc:373):     stop all erpc clients. set stop=false
+20251126-18:15.40-664891(us) 76335 ! stop            (bench.cc:380):     ShardClient for par_id=0 is nullptr, skipping stop()
+20251126-18:15.40-664926(us) 76335 ! stop            (bench.cc:380):     ShardClient for par_id=1 is nullptr, skipping stop()
+20251126-18:15.40-664954(us) 76335 ! stop            (bench.cc:380):     ShardClient for par_id=2 is nullptr, skipping stop()
+20251126-18:15.40-664982(us) 76335 ! stop            (bench.cc:380):     ShardClient for par_id=3 is nullptr, skipping stop()
+[SHUTDOWN] First stop() completed
+[SHUTDOWN] Joining 4 worker threads
+[SHUTDOWN] Joining worker 0
+bash/shard.sh: line 80: 76335 Killed                  ./build/dbtest --num-threads 4 --shard-index 1 --shard-config /root/cse532/mako/src/mako/config/local-shards2-warehouses4.yml -P localhost
+
+Cleaning up...
+Done!

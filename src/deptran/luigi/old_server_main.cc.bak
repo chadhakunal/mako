@@ -1,0 +1,131 @@
+/**
+ * @file luigi_server_main.cc
+ * @brief Server-side entry point for Luigi protocol
+ *
+ * This is the Luigi equivalent of dbtest.cc - it creates LuigiServer instances
+ * with scheduler/executor/OWD modules and runs the event loop.
+ *
+ * Reuses Mako's BenchmarkConfig for configuration management.
+ *
+ * Usage:
+ *   ./luigi_server --shard-config config.yml --site-name site0 --num-threads 4
+ */
+
+#include <iostream>
+#include <string>
+#include <thread>
+
+#include "benchmarks/benchmark_config.h"
+#include "benchmarks/rpc_setup.h"
+#include "deptran/luigi/service.h"
+#include "lib/common.h"
+
+using namespace std;
+using namespace mako;
+using namespace janus;
+
+// Global variables (following Mako's pattern)
+transport::Configuration *config = nullptr;
+int shardIndex = 0;
+
+static void print_usage(const char *prog) {
+  cerr
+      << "Usage: " << prog << " [options]\n"
+      << "\nRequired:\n"
+      << "  --shard-config FILE    Configuration file\n"
+      << "  --site-name NAME       Site name from config\n"
+      << "\nOptional:\n"
+      << "  --num-threads N        Number of worker threads (default: 4)\n"
+      << "  --benchmark TYPE       Benchmark type: tpcc|micro (default: tpcc)\n"
+      << "  --duration SEC         Run duration in seconds (default: 30)\n"
+      << "  --help                 Show this help\n";
+}
+
+int main(int argc, char **argv) {
+  // Get BenchmarkConfig singleton
+  auto &cfg = BenchmarkConfig::getInstance();
+
+  // Parse command line arguments (reuse Mako's pattern)
+  string site_name;
+  string benchmark_type = "tpcc";
+  string config_file;
+
+  for (int i = 1; i < argc; i++) {
+    string arg = argv[i];
+    if (arg == "--shard-config" && i + 1 < argc) {
+      config_file = argv[++i];
+    } else if (arg == "--site-name" && i + 1 < argc) {
+      site_name = argv[++i];
+    } else if (arg == "--num-threads" && i + 1 < argc) {
+      cfg.setNthreads(atoi(argv[++i]));
+    } else if (arg == "--benchmark" && i + 1 < argc) {
+      benchmark_type = argv[++i];
+    } else if (arg == "--duration" && i + 1 < argc) {
+      cfg.setRuntime(atoi(argv[++i]));
+    } else if (arg == "--help") {
+      print_usage(argv[0]);
+      return 0;
+    }
+  }
+
+  // Validate required arguments
+  if (config_file.empty() || site_name.empty()) {
+    cerr << "Error: --shard-config and --site-name are required\n";
+    print_usage(argv[0]);
+    return 1;
+  }
+
+  // Load configuration (set global variable)
+  config = new transport::Configuration(config_file);
+  cfg.setConfig(config);
+
+  // Get site info and set shard index
+  auto site = config->GetSiteByName(site_name);
+  if (!site) {
+    cerr << "Error: Site '" << site_name << "' not found in config\n";
+    return 1;
+  }
+
+  shardIndex = site->shard_id;
+  cfg.setShardIndex(shardIndex);
+  cfg.setNshards(config->nshards);
+
+  // Set cluster role
+  if (site->is_leader) {
+    cfg.setPaxosProcName(LOCALHOST_CENTER);
+  } else if (site->replica_idx == 1) {
+    cfg.setPaxosProcName(P1_CENTER);
+  } else if (site->replica_idx == 2) {
+    cfg.setPaxosProcName(P2_CENTER);
+  } else {
+    cfg.setPaxosProcName(LEARNER_CENTER);
+  }
+
+  cout << "=== Luigi Server Configuration ===\n"
+       << "Site:       " << site_name << "\n"
+       << "Shard:      " << cfg.getShardIndex() << "/" << cfg.getNshards()
+       << "\n"
+       << "Cluster:    " << cfg.getCluster() << "\n"
+       << "Benchmark:  " << benchmark_type << "\n"
+       << "Threads:    " << cfg.getNthreads() << "\n"
+       << "===================================\n\n";
+
+  // Create LuigiServer instance
+  // All setup (OWD, scheduler, state machine, RPC) happens inside server->Run()
+  cout << "Creating Luigi server...\n";
+  LuigiServer *server = new LuigiServer(cfg.getShardIndex(), benchmark_type);
+
+  cout << "\n=== Starting Luigi Server ===\n";
+  cout << "Server will initialize OWD, scheduler, and state machine...\n";
+  cout << "Press Ctrl+C to stop\n\n";
+
+  // Run server event loop (this does all the setup internally)
+  server->Run();
+
+  // Cleanup
+  cout << "\nShutting down...\n";
+  delete server;
+
+  cout << "Luigi server stopped\n";
+  return 0;
+}

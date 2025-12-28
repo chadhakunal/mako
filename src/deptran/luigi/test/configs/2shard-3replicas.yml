@@ -1,0 +1,28 @@
+# Luigi 2-Shard with Replication Test Configuration
+# Mako-compatible format with 3 replicas per shard for Paxos
+# Based on Mako's multi-shard replication patterns
+
+site:
+  server:  # 2 shards, 3 replicas each
+    - ["s101:31850", "s102:31851", "s103:31852"]  # Shard 0 replicas
+    - ["s201:31853", "s202:31854", "s203:31855"]  # Shard 1 replicas
+  client:
+    - ["c01"]
+
+process:
+  s101: s101  # Shard 0 - leader replica
+  s102: s102  # Shard 0 - follower replica
+  s103: s103  # Shard 0 - follower replica
+  s201: s201  # Shard 1 - leader replica
+  s202: s202  # Shard 1 - follower replica
+  s203: s203  # Shard 1 - follower replica
+  c01: c01
+
+host:
+  s101: 127.0.0.1
+  s102: 127.0.0.1
+  s103: 127.0.0.1
+  s201: 127.0.0.1
+  s202: 127.0.0.1
+  s203: 127.0.0.1
+  c01: 127.0.0.1

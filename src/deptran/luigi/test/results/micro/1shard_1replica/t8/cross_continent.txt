@@ -1,0 +1,27 @@
+=== 1-Shard 1-Replica Microbenchmark ===
+Config: src/deptran/luigi/test/configs/1shard-1replica.yml
+Duration: 30s
+Threads: 8
+OWD: 100ms
+Headroom: 20ms
+Network: 80ms ± 10ms
+Starting replica (s101:31850)...
+Applying network latency: 80ms ± 10ms (pareto)...
+Running microbenchmark...
+=== Luigi Coordinator ===
+Shards: 1, Threads: 8, Duration: 30s, Benchmark: micro
+I [/root/cse532/mako/src/deptran/luigi/coordinator.cc:243] 2025-12-26 00:29:18.929 | Waiting for completion: dispatched=207104, completed=205516
+I [/root/cse532/mako/src/deptran/luigi/coordinator.cc:257] 2025-12-26 00:29:19.137 | Benchmark complete: dispatched=207104, completed=207104
+========== Benchmark Results ==========
+Duration:          30209 ms
+Total Txns:        207104
+Committed:         207104
+Aborted:           0 (0.00%)
+Throughput:        6855.71 txns/sec
+Avg Latency:       232198.55 us
+P50 Latency:       230630.00 us
+P99 Latency:       321412.00 us
+P99.9 Latency:     407276.00 us
+========================================
+Cleaning up...
+Done!

@@ -15,6 +15,9 @@ trd=$3
 cluster=$4
 is_micro=$5
 is_replicated=$6
+duration=$7
+shift 7 2>/dev/null || true  # Shift past known args, remaining are extra args for dbtest
+EXTRA_ARGS="$@"
 let up=trd+3
 #sudo cgset -r cpuset.mems=0 cpulimit
 #sudo cgset -r cpuset.cpus=0-$up cpulimit
@@ -49,6 +52,11 @@ fi
 # Build the base command
 CMD="./build/dbtest --num-threads $trd --shard-index $shard --shard-config $path/config/local-shards$nshard-warehouses$trd.yml -P $cluster"
 
+# Add duration flag if provided (and greater than 0)
+if [ ! -z "$duration" ] && [ "$duration" -gt "0" ]; then
+    CMD="$CMD --duration $duration"
+fi
+
 # Add --is-micro flag if enabled (value is 1)
 if [ "$is_micro" == "1" ]; then
     CMD="$CMD --is-micro"
@@ -57,6 +65,11 @@ fi
 # Add paxos config and --is-replicated flag only if replication is enabled
 if [ "$is_replicated" == "1" ]; then
     CMD="$CMD -F config/1leader_2followers/paxos${trd}_shardidx${shard}.yml -F config/occ_paxos.yml --is-replicated"
+fi
+
+# Append any extra arguments passed to the script
+if [ ! -z "$EXTRA_ARGS" ]; then
+    CMD="$CMD $EXTRA_ARGS"
 fi
 
 # Print configuration
@@ -69,6 +82,9 @@ echo "  Number of threads: $trd"
 echo "  Cluster:           $cluster"
 echo "  Micro benchmark:   $([ "$is_micro" == "1" ] && echo "enabled" || echo "disabled")"
 echo "  Replicated mode:   $([ "$is_replicated" == "1" ] && echo "enabled" || echo "disabled")"
+if [ ! -z "$EXTRA_ARGS" ]; then
+    echo "  Extra args:        $EXTRA_ARGS"
+fi
 echo "========================================="
 
 # Execute command (with or without gdb)

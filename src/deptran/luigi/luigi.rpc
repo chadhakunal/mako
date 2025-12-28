@@ -1,0 +1,94 @@
+namespace janus;
+
+abstract service Luigi {
+    // Main transaction dispatch RPC (synchronous - waits for execution)
+    defer Dispatch(
+        i64 txn_id,
+        i64 expected_time,
+        i32 worker_id,
+        vector<i32> involved_shards,
+        string ops_data
+        |
+        i32 status,
+        i64 commit_timestamp,
+        string results_data
+    );
+    
+    // One-way delay ping for latency measurement
+    defer OwdPing(
+        i64 send_time
+        |
+        i32 status
+    );
+    
+    // Deadline proposal phase 1: broadcast proposed timestamp to all leaders
+    defer DeadlinePropose(
+        i64 tid,
+        i32 src_shard,
+        i64 proposed_ts
+        |
+        i32 status
+    );
+    
+    // Deadline confirmation phase 2: confirm agreed max timestamp
+    defer DeadlineConfirm(
+        i64 tid,
+        i32 src_shard,
+        i64 agreed_ts
+        |
+        i32 status
+    );
+    
+    // Batch deadline proposal (Phase 2 optimization)
+    // Includes watermarks to piggyback watermark exchange
+    defer DeadlineBatchPropose(
+        vector<i64> tids,
+        i32 src_shard,
+        vector<i64> proposed_timestamps,
+        vector<i64> watermarks
+        |
+        i32 status
+    );
+    
+    // Batch deadline confirmation (Phase 2 optimization)
+    defer DeadlineBatchConfirm(
+        vector<i64> tids,
+        i32 src_shard,
+        vector<i64> agreed_timestamps
+        |
+        i32 status
+    );
+    
+    // Watermark exchange (leader-to-leader coordination)
+    defer WatermarkExchange(
+        i32 src_shard,
+        vector<i64> watermarks
+        |
+        i32 status
+    );
+    
+    // Replicate log entry (leader -> follower, per-worker stream)
+    defer Replicate(
+        i32 worker_id,
+        i64 slot_id,
+        i64 txn_id,
+        i64 timestamp,
+        string log_data
+        |
+        i32 status
+    );
+    
+    // Batch replicate log entries (leader -> follower, Raft-style AppendEntries)
+    // Sends all entries after prev_committed_slot for a given worker stream
+    defer BatchReplicate(
+        i32 worker_id,
+        i64 prev_committed_slot,
+        vector<i64> slot_ids,
+        vector<i64> txn_ids,
+        vector<i64> timestamps,
+        vector<string> log_entries
+        |
+        i32 status,
+        i64 last_appended_slot
+    );
+}
