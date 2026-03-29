@@ -667,6 +667,7 @@ public:
     }
 
     bool try_commit(bool no_paxos= false);
+    bool try_commit_luigi();  // Luigi timestamp-ordered execution protocol
     bool shard_try_lock_last_writeset();
     int shard_validate();
     void shard_install(uint32_t timestamp);
@@ -977,12 +978,21 @@ public:
 
     static bool try_commit() {
         always_assert(in_progress());
+        // Check if Luigi protocol is enabled
+        if (BenchmarkConfig::getInstance().getUseLuigi()) {
+            return TThread::txn->try_commit_luigi();
+        }
         return TThread::txn->try_commit();
     }
 
     static bool try_commit_no_paxos() {
         always_assert(in_progress());
         return TThread::txn->try_commit(true);
+    }
+
+    static bool try_commit_luigi() {
+        always_assert(in_progress());
+        return TThread::txn->try_commit_luigi();
     }
 
     static bool shard_try_lock_last_writeset() {
